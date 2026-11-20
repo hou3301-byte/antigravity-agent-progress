@@ -70,6 +70,32 @@ class InstallationTest(unittest.TestCase):
         self.assertTrue(upstream_app.is_dir())
         self.assertEqual((chinese / "plugin.json").read_bytes(), original)
 
+    def test_upgrade_managed_plugin_metadata(self):
+        self.install()
+        record_path = self.state / "install.json"
+        record = json.loads(record_path.read_text())
+        for name in record["plugins"]:
+            plugin = self.destination / name
+            path = plugin / "plugin.json"
+            old = json.loads(path.read_text())
+            old.update({"author": {"name": "Previous release"}, "version": "0.2.0"})
+            path.write_text(json.dumps(old))
+            record["plugins"][name] = PACKAGE["fingerprint"](plugin)
+        record_path.write_text(json.dumps(record))
+
+        self.install()
+        expected = json.loads((ROOT / "agent-progress/plugin.json").read_text())
+        for name in record["plugins"]:
+            actual = json.loads((self.destination / name / "plugin.json").read_text())
+            for field in ("author", "version", "homepage", "repository"):
+                self.assertEqual(actual[field], expected[field])
+        chinese = self.destination / "antigravity-zh-prompt"
+        upstream = ROOT / "vendor/antigravity-zh-prompt"
+        for path in ("LICENSE", "rules/AGENTS.md"):
+            self.assertEqual((chinese / path).read_bytes(), (upstream / path).read_bytes())
+        self.uninstall()
+        self.assertEqual(list(self.destination.iterdir()), [])
+
     def test_uninstall_moves_modified_owned_plugin_to_backup(self):
         self.install()
         progress = self.destination / "agent-progress"

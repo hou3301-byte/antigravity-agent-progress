@@ -2,7 +2,13 @@
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "agent-progress",
   "displayName": "执行进度",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "在当前对话中汇报阶段进度，并显示任务、工具调用与耗时。",
+  "author": {
+    "name": "hou3301-byte",
+    "url": "https://github.com/hou3301-byte"
+  },
+  "homepage": "https://github.com/hou3301-byte/antigravity-agent-progress#readme",
+  "repository": "https://github.com/hou3301-byte/antigravity-agent-progress",
   "suggestedPrompts": ["演示执行进度卡：查看当前目录、运行一个耗时 8 秒的无副作用命令，然后核对结果。"]
 }

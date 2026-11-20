@@ -78,7 +78,9 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
         sources = [bundle / PROGRESS]
         if include_chinese:
             sources.append(bundle / "vendor" / CHINESE)
+        publisher = json.loads((bundle / PROGRESS / "plugin.json").read_text(encoding="utf-8"))
         pending = {}
+        replacements = {}
         for source in sources:
             staged = stage / source.name
             shutil.copytree(source, staged)
@@ -88,19 +90,28 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
                 raise RuntimeError(f"插件安装包有误 {source.name}")
             if source.name == CHINESE:
                 manifest.pop("disabled", None)
+                for field in ("author", "version", "homepage", "repository"):
+                    manifest[field] = publisher[field]
+                manifest["displayName"] = "简体中文规则"
+                manifest["description"] = "让 Antigravity 使用简体中文规划、汇报和回复。规则源自 guuguo，由本组合包维护。"
                 manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             target = destination / source.name
             expected = fingerprint(staged)
             if target.exists() or target.is_symlink():
-                identical = target.is_dir() and not target.is_symlink() and fingerprint(target) == expected
-                if not identical and source.name == PROGRESS:
-                    raise RuntimeError(f"已有自定义进度插件，请先备份并移走 {target}")
-                if identical:
+                current = fingerprint(target) if target.is_dir() and not target.is_symlink() else None
+                if current == expected:
                     tracked["plugins"][source.name] = expected
-                print(f"保留已安装的插件 {source.name}")
-            else:
-                pending[target] = staged
-                tracked["plugins"][source.name] = expected
+                    print(f"保留已安装的插件 {source.name}")
+                    continue
+                if current and current == tracked["plugins"].get(source.name):
+                    replacements[target] = current
+                elif source.name == CHINESE:
+                    print(f"保留独立安装或有本地修改的插件 {source.name}")
+                    continue
+                else:
+                    raise RuntimeError(f"已有未登记或有本地修改的进度插件，请先备份并移走 {target}")
+            pending[target] = staged
+            tracked["plugins"][source.name] = expected
 
         if original:
             apps.mkdir(parents=True, exist_ok=True)
@@ -115,18 +126,25 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
                 write_launcher(staged_app, original, state)
                 tracked["launcher"] = True
                 pending[app] = staged_app
-                finish_install(bundle, pending, tracked, state, stage)
+                finish_install(bundle, pending, replacements, tracked, state, stage)
         else:
             if include_launcher and launcher_exists:
                 print("复用已有的「Antigravity 中文」入口。")
-            finish_install(bundle, pending, tracked, state, stage)
+            finish_install(bundle, pending, replacements, tracked, state, stage)
 
 
-def finish_install(bundle, pending, tracked, state, stage):
+def finish_install(bundle, pending, replacements, tracked, state, stage):
     created = []
+    previous = {}
     try:
         for target, source in pending.items():
-            if target.exists() or target.is_symlink():
+            if target in replacements:
+                if target.is_symlink() or not target.is_dir() or fingerprint(target) != replacements[target]:
+                    raise RuntimeError(f"升级期间文件发生变化 {target}")
+                backup = stage / f".previous-{target.name}"
+                target.rename(backup)
+                previous[target] = backup
+            elif target.exists() or target.is_symlink():
                 raise FileExistsError(target)
             source.rename(target)
             created.append(target)
@@ -138,13 +156,15 @@ def finish_install(bundle, pending, tracked, state, stage):
         manifest = stage / "install.json"
         manifest.write_text(json.dumps(tracked, ensure_ascii=False, indent=2), encoding="utf-8")
         manifest.replace(state / "install.json")
-    except OSError:
+    except (OSError, RuntimeError):
         for target in reversed(created):
             target.rename(pending[target])
+        for target, backup in previous.items():
+            backup.rename(target)
         raise
     for target in created:
         if target != state / "runtime":
-            print(f"已安装 {target}")
+            print(f"{'已更新' if target in replacements else '已安装'} {target}")
 
 
 def stop_owned_session(state):

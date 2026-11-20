@@ -20,7 +20,7 @@
 需要 macOS、已安装的 [Antigravity App](https://antigravity.google/download) 和可用的 `/usr/bin/python3`。进度卡已在 Antigravity App 2.33.0 上验证。运行以下命令为当前用户的所有项目安装进度插件、中文规则和中文入口。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.2.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.2.1/install.sh | bash
 ```
 
 可以在上面命令的 `bash` 后追加以下选项。
@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-prog
 | 只装进度插件 | `-s -- --progress-only` |
 | 只为指定项目装插件 | `-s -- --workspace "/完整项目路径"` |
 
-全局插件安装到 `~/.gemini/config/plugins/`，项目插件安装到项目内的 `.agents/plugins/`。已有同名中文入口会复用，已有中文规则会保留当前版本和启用状态。
+全局插件安装到 `~/.gemini/config/plugins/`，项目插件安装到项目内的 `.agents/plugins/`。已有同名中文入口会复用。独立安装的上游中文规则会保留当前版本和启用状态。
 
 ## 使用
 
@@ -42,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-prog
 ## 一键卸载与回退
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.2.0/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.2.1/uninstall.sh | bash
 ```
 
 离线时可以运行安装器留在本机的卸载脚本。
@@ -56,4 +56,4 @@ bash ~/.gemini/config/antigravity-agent-progress-install/uninstall.sh
 - 卸载会停止本包启动的监视器，移除本包管理的启动入口和插件。修改过的插件目录会移动到备份位置，终端会显示路径。原版 App、聊天历史和预先安装的上游组件会保留。
 - 卸载完成后，按 **⌘Q** 退出当前会话，再点击官方 Antigravity 图标，即可恢复原版界面。
 
-若从 `v0.1.0` 升级，先运行新版安装命令，让卸载器识别与新版安装包内容一致的旧插件。安装器遇到内容不同的现有进度插件时会停止，以便保留你的本地修改。
+运行新版安装命令即可升级由 `v0.2.0` 安装器登记且未在本机修改的插件。如果直接从 `v0.1.0` 升级，先运行 `v0.2.0` 的安装命令登记旧插件，再安装最新版。安装器会提示处理未登记或有本地修改的进度插件。
