@@ -57,9 +57,3 @@ bash ~/.gemini/config/antigravity-agent-progress-install/uninstall.sh
 - 卸载完成后，按 **⌘Q** 退出当前会话，再点击官方 Antigravity 图标，即可恢复原版界面。
 
 若从 `v0.1.0` 升级，先运行新版安装命令，让卸载器识别与新版安装包内容一致的旧插件。安装器遇到内容不同的现有进度插件时会停止，以便保留你的本地修改。
-
-## 源码与致谢
-
-- [agent-progress/](agent-progress/) 包含 Agent 规则、进度卡技能和生命周期 hooks。工具记录保存到当前会话的本地数据目录，插件只记录工具名、步骤、状态和时间等进度信息。
-- [scripts/](scripts/) 包含中文启动器和安装、卸载逻辑。可在仓库根目录运行 `/usr/bin/python3 -B -m unittest discover -s tests -v` 验证安装回退流程。
-- 中文规则、词库和相关运行组件来自 [guuguo/antigravity-zh-launcher](https://github.com/guuguo/antigravity-zh-launcher)，附有上游 [规则插件许可](vendor/antigravity-zh-prompt/LICENSE) 和 [启动器组件许可](vendor/antigravity-zh-launcher/LICENSE)。进度展示的产品思路参考了 [Anti-Claude](https://github.com/hongqi7/Anti-Claude)。
