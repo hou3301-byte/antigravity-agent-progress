@@ -1,0 +1,8 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "agent-progress",
+  "displayName": "执行进度",
+  "version": "0.1.0",
+  "description": "在当前对话中汇报阶段进度，并显示任务、工具调用与耗时。",
+  "suggestedPrompts": ["演示执行进度卡：查看当前目录、运行一个耗时 8 秒的无副作用命令，然后核对结果。"]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "antigravity-zh-prompt",
+  "displayName": "全流程中文思考提示词",
+  "description": "随「Antigravity 中文」入口动态启用的全局中文提示词插件，引导思考推理链（Thinking）、方案规划、工具摘要与回复全程使用简体中文。",
+  "version": "1.0.0",
+  "license": "MIT",
+  "logo": "assets/logo.svg",
+  "author": {
+    "name": "guuguo",
+    "url": "https://github.com/guuguo"
+  },
+  "homepage": "https://github.com/guuguo/antigravity-zh-launcher",
+  "repository": "https://github.com/guuguo/antigravity-zh-launcher",
+  "disabled": true
+}

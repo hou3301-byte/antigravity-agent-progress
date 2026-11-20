@@ -1,0 +1,18 @@
+{
+  "agent-progress": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [{"command": "/usr/bin/python3 ./scripts/progress.py pre", "timeout": 3}]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [{"command": "/usr/bin/python3 ./scripts/progress.py post", "timeout": 3}]
+      }
+    ],
+    "Stop": [{"command": "/usr/bin/python3 ./scripts/progress.py stop", "timeout": 3}]
+  }
+}
