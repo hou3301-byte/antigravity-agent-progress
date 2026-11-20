@@ -46,6 +46,9 @@ class InstallationTest(unittest.TestCase):
         subprocess.run(["/bin/bash", "-n", str(shell)], check=True)
         self.assertIn(str(self.official), shell.read_text())
         self.assertTrue((self.state / "runtime/overlay.js").is_file())
+        self.assertTrue((self.state / "runtime/progress-overlay.js").is_file())
+        self.assertEqual((self.state / "runtime/progress.css").read_bytes(),
+                         (ROOT / "agent-progress/assets/progress.css").read_bytes())
         self.assertTrue((self.state / "uninstall.sh").is_file())
         self.uninstall(dry_run=True)
         self.assertTrue(self.app.is_dir())
@@ -72,6 +75,8 @@ class InstallationTest(unittest.TestCase):
 
     def test_upgrade_managed_plugin_metadata(self):
         self.install()
+        overlay = self.state / "runtime/progress-overlay.js"
+        overlay.unlink()
         record_path = self.state / "install.json"
         record = json.loads(record_path.read_text())
         for name in record["plugins"]:
@@ -84,6 +89,7 @@ class InstallationTest(unittest.TestCase):
         record_path.write_text(json.dumps(record))
 
         self.install()
+        self.assertTrue(overlay.is_file())
         expected = json.loads((ROOT / "agent-progress/plugin.json").read_text())
         for name in record["plugins"]:
             actual = json.loads((self.destination / name / "plugin.json").read_text())

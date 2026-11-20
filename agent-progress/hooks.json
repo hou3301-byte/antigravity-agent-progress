@@ -1,6 +1,7 @@
 {
   "agent-progress": {
     "enabled": true,
+    "PreInvocation": [{"command": "/usr/bin/python3 ./scripts/progress.py invoke", "timeout": 3}],
     "PreToolUse": [
       {
         "matcher": ".*",

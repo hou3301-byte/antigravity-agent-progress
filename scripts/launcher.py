@@ -2,6 +2,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -11,6 +12,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+sys.dont_write_bytecode = True
 from websocket import MiniWebSocket
 
 
@@ -37,19 +39,40 @@ def page_address(target, port):
     return f"{page.scheme}://{page.netloc}", websocket.path
 
 
-def update_page(port, address, overlay, fingerprint):
+def read_progress(raw_url, brain):
+    route = urllib.parse.urlsplit(raw_url).path
+    match = re.fullmatch(r"/c/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})", route)
+    if not match:
+        return None
+    try:
+        conversation = match[1]
+        file = brain / conversation / ".system_generated/agent-progress/state.json"
+        with file.open(encoding="utf-8") as stream:
+            state = json.loads(stream.read(128 * 1024))
+        if not isinstance(state.get("started_at"), (int, float)):
+            return None
+        tools = state["tools"]
+        visible_tools = [tool for tool in tools[:-8] if tool["state"] == "running"] + tools[-8:]
+        return {"conversation": conversation, "started_at": state["started_at"], "run": state["run"],
+                "items": state["items"], "tools": visible_tools, "active": state["active"]}
+    except (OSError, ValueError, AttributeError, KeyError, TypeError):
+        return None
+
+
+def update_page(port, address, overlay, fingerprint, progress=None):
     origin, path = address
     client = MiniWebSocket(port, path, timeout=1)
     try:
         guard = f"location.origin === {json.dumps(origin)}"
-        check = (f"{guard} && window.__observedDocument === document && "
+        check = (f"{guard} && window.__observedDocument === document && Boolean(window.__agyProgress) && "
                  f"window.__antigravityZhPatchFingerprint === {json.dumps(fingerprint)}")
         result = client.call("Runtime.evaluate", {"expression": check, "returnByValue": True}, timeout=1)
-        if result.get("result", {}).get("value") is True:
-            return
-        code = (f"if ({guard}) {{ window.__antigravityZhPatchRequestedFingerprint = "
-                f"{json.dumps(fingerprint)};\n{overlay}\n}}")
-        client.call("Runtime.evaluate", {"expression": code}, timeout=2)
+        if result.get("result", {}).get("value") is not True:
+            code = (f"if ({guard}) {{ window.__antigravityZhPatchRequestedFingerprint = "
+                    f"{json.dumps(fingerprint)};\n{overlay}\n}}")
+            client.call("Runtime.evaluate", {"expression": code}, timeout=2)
+        data = json.dumps(progress, ensure_ascii=True)
+        client.call("Runtime.evaluate", {"expression": f"if ({guard}) window.__agyProgress?.publish({data})"}, timeout=1)
     finally:
         client.close()
 
@@ -60,8 +83,12 @@ def open_session(executable, resources):
 
     locale = json.loads((resources / "zh-CN.json").read_text(encoding="utf-8"))
     template = (resources / "overlay.js").read_text(encoding="utf-8")
-    overlay = template.replace("/*__AGY_LOCALE__*/", json.dumps(locale, ensure_ascii=True))
+    translation = template.replace("/*__AGY_LOCALE__*/", json.dumps(locale, ensure_ascii=True))
+    progress = (resources / "progress-overlay.js").read_text(encoding="utf-8")
+    stylesheet = (resources / "progress.css").read_text(encoding="utf-8")
+    overlay = translation + "\n;\n" + progress.replace("/*__AGY_PROGRESS_CSS__*/ ''", json.dumps(stylesheet))
     fingerprint = hashlib.sha256(overlay.encode()).hexdigest()[:16]
+    brain = Path.home() / ".gemini/antigravity/brain"
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -85,7 +112,7 @@ def open_session(executable, resources):
             try:
                 address = page_address(target, port)
                 if address:
-                    update_page(port, address, overlay, fingerprint)
+                    update_page(port, address, overlay, fingerprint, read_progress(target["url"], brain))
             except (OSError, ValueError, EOFError, RuntimeError):
                 continue
         time.sleep(1)

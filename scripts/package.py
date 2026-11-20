@@ -113,14 +113,20 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
             pending[target] = staged
             tracked["plugins"][source.name] = expected
 
+        if original or (include_launcher and tracked["launcher"] and is_owned_launcher(app)):
+            installed_runtime = state / "runtime"
+            runtime = stage / "runtime"
+            shutil.copytree(bundle / "vendor" / "antigravity-zh-launcher", runtime)
+            for script in ("launcher.py", "progress-overlay.js"):
+                shutil.copyfile(bundle / "scripts" / script, runtime / script)
+            shutil.copyfile(bundle / PROGRESS / "assets/progress.css", runtime / "progress.css")
+            current = fingerprint(installed_runtime) if installed_runtime.is_dir() and not installed_runtime.is_symlink() else None
+            if current != fingerprint(runtime):
+                pending[installed_runtime] = runtime
+                if current:
+                    replacements[installed_runtime] = current
         if original:
             apps.mkdir(parents=True, exist_ok=True)
-            installed_runtime = state / "runtime"
-            if not tracked["launcher"] or not (installed_runtime / "launcher.py").is_file():
-                runtime = stage / "runtime"
-                shutil.copytree(bundle / "vendor" / "antigravity-zh-launcher", runtime)
-                shutil.copyfile(bundle / "scripts" / "launcher.py", runtime / "launcher.py")
-                pending[installed_runtime] = runtime
             with tempfile.TemporaryDirectory(prefix=".progress-launcher-", dir=apps) as shortcut_temp:
                 staged_app = Path(shortcut_temp) / APP_NAME
                 write_launcher(staged_app, original, state)
