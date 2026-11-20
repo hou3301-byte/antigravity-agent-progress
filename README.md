@@ -15,16 +15,16 @@
 
 进度功能使用 Antigravity 的原生规则、hooks 和内联组件，官方图标启动的会话也能使用。CDP 监视器只由中文入口启动，随该次 App 会话结束。
 
-### 本机开发版 0.3.0
+### 0.3.0 版本特性
 
-从仓库根目录运行 `bash install.sh`，然后退出 Antigravity，打开「Antigravity 中文」。这个入口会在当前对话自动展开 `Worked for` 和进度分组，用户仍可手动收起。任务卡聚焦待办和完成度，独立的工具活动条显示当前或最近一次调用和耗时。活动条默认收起，展开可看最近 8 条。普通启动入口使用插件提供的阶段消息和内联卡片。
+安装后退出 Antigravity，打开「Antigravity 中文」。这个入口会在当前对话自动展开 `Worked for` 和进度分组，用户仍可手动收起。任务卡聚焦待办和完成度，独立的工具活动条显示当前或最近一次调用和耗时。活动条默认收起，展开可看最近 8 条。普通启动入口使用插件提供的阶段消息和内联卡片。
 
 ## 安装
 
 需要 macOS、已安装的 [Antigravity App](https://antigravity.google/download) 和可用的 `/usr/bin/python3`。进度卡已在 Antigravity App 2.33.0 上验证。运行以下命令为当前用户的所有项目安装进度插件、中文规则和中文入口。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.2.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.3.0/install.sh | bash
 ```
 
 可以在上面命令的 `bash` 后追加以下选项。
@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-prog
 ## 一键卸载与回退
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.2.1/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.3.0/uninstall.sh | bash
 ```
 
 离线时可以运行安装器留在本机的卸载脚本。
