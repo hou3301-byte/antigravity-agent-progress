@@ -8,28 +8,28 @@
 
 | 功能 | 使用效果 |
 | --- | --- |
-| 边做边汇报 | Agent 每次调工具前用 1–2 句短话讲清「刚查到什么、下一步干什么」，形成「一句进展 → 一行可展开工具摘要 → 下一句进展」的 Claude 风格叙事流。简单问答直接回答。 |
-| 流内 `TodoWrite` 进度卡 | 三阶段及以上任务开场输出三态清单，由前端直接渲染为流内进度卡片；阶段推进依靠隐形 `<!-- todo:N/M -->` 注释驱动，零工具调用，完成后卡片自动消失。 |
-| 完整步骤与实时读秒 | 自动解锁完整步骤展示并展开回合末的 `Worked for` 分组；正在执行的原生工具行直接显示蓝色脉冲圆点与实时读秒，移除多余的底部工具活动栏。 |
+| 边做边汇报 | 多步骤任务中，Agent 用简短消息交代当前发现和下一步。连续的短调用可以合并汇报，简单问答直接回答。 |
+| 流内 `TodoWrite` 进度卡 | 三个及以上阶段的任务，或明确要求显示进度卡时，可在聊天中看到待办、进行中、阻塞和完成状态。卡片由清单和阶段标记更新，收到完成标记后自动收起。 |
+| 完整步骤与实时读秒 | 默认展开 `Worked for` 等原生步骤分组，可以手动收起。计时显示在当前运行的原生工具行上，历史步骤可在原对话里查看。 |
 | 中文界面和中文规则 | 「Antigravity 中文」入口用本地 CDP 翻译界面控件。简体中文规则插件可以独立开关。 |
 
-进度功能使用 Antigravity 的原生规则与流内渲染，不改动官方 App 本体。CDP 监视器只由中文入口启动，随该次 App 会话结束。
-
-### 0.4.0 版本特性
-
-- **零工具调用的流内 `TodoWrite` 卡片**：开场三态 Markdown 清单自动收编为流内卡片并隐藏重复原始列表；隐形 `<!-- todo:N/M -->` 推进进度，`<!-- todo:done -->` 完成后自动消失。
-- **纯正的原生工具行读秒**：彻底移除冗余的底部「工具活动」条，蓝色脉冲圆点与读秒直接附着在正在执行的原生工具行上。
-- **完整步骤自动解锁**：安装全局包时自动开启 `verboseConversationSteps` 并自动展开 `Worked for` 分组；一键卸载时无损还原原配置。
+阶段汇报由插件规则引导。流内任务卡、工具行读秒和步骤自动展开由本项目的「Antigravity 中文」入口提供。它启动官方 App，通过仅监听本机的 CDP 渲染界面增强。监视进程随该次 App 会话退出。
 
 ## 安装
 
 需要 macOS、已安装的 [Antigravity App](https://antigravity.google/download) 和可用的 `/usr/bin/python3`。进度卡已在 Antigravity App 2.33.0 上验证。运行以下命令为当前用户的所有项目安装进度插件、中文规则和中文入口。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.4.0/install.sh | bash
+(
+  set -o pipefail
+  curl -4 -fsSL --connect-timeout 5 --max-time 15 \
+    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.4.0/install.sh | bash
+)
 ```
 
-可以在上面命令的 `bash` 后追加以下选项。
+`-4` 让脚本下载走 IPv4，可避开部分网络访问 `raw.githubusercontent.com` 时的 IPv6 超时。连接超时为 5 秒，脚本下载总时限为 15 秒。启动安装脚本后，发布包由 `codeload.github.com` 另行下载。安装完成时，终端会打印「卸载入口」及其路径。
+
+可以在上面命令的 `bash` 后追加以下选项。以下三种模式都只安装插件。
 
 | 用法 | 命令后缀 |
 | --- | --- |
@@ -37,29 +37,48 @@ curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-prog
 | 只装进度插件 | `-s -- --progress-only` |
 | 只为指定项目装插件 | `-s -- --workspace "/完整项目路径"` |
 
-全局插件安装到 `~/.gemini/config/plugins/`，项目插件安装到项目内的 `.agents/plugins/`。已有同名中文入口会复用。独立安装的上游中文规则会保留当前版本和启用状态。
+全局插件安装到 `~/.gemini/config/plugins/`，项目插件安装到项目内的 `.agents/plugins/`。如果本机已有有效的全局配置，安装器会登记 `verboseConversationSteps` 的原值并开启完整步骤展示。
+
+如果脚本下载仍然超时，可以从 GitHub 克隆同一版本，再运行本地安装脚本。
+
+```bash
+git clone --depth 1 --branch v0.4.0 https://github.com/hou3301-byte/antigravity-agent-progress.git &&
+  bash antigravity-agent-progress/install.sh
+```
+
+已克隆仓库时，也可以在对应版本的仓库根目录直接运行 `bash install.sh`。
 
 ## 使用
 
-1. 想看中文界面时，在 Finder 的「应用程序」（或个人 `~/Applications`）目录打开「Antigravity 中文」。安装器会自动在 `/Applications` 创建指向 `~/Applications/Antigravity 中文.app` 的软链接（无写入权限时会提示手动创建）。若机器已装上游启动器，可继续使用已有图标。切换启动入口前先保存工作并按 **⌘Q** 完全退出。
-2. 在 Antigravity 中新建对话，发送「演示执行进度卡」。演示会查看当前目录、运行一条等待命令并核对结果。也可以在输入框运行 `/progress-card` 技能。
-3. 日常使用时，可以直接让 Agent 处理多阶段任务，或在任务里加一句「执行过程中展示进度卡」。需要停用某个插件时，在「自定义 → 已安装」找到它并选择禁用。
+1. 保存工作并按 **⌘Q** 完全退出当前 Antigravity，再从 Finder 的「应用程序」打开「Antigravity 中文」。如果安装器无法写入 `/Applications`，可从个人的 `~/Applications` 打开。
+2. 新建对话，发送「演示执行进度卡」，或选用 `/progress-card` 技能。演示会检查当前目录、等待 8 秒并核对结果。等待时可以看工具行计时，最终回复出现后卡片会自动收起。
+3. 日常可以直接交给 Agent 一个多阶段任务，或在任务里加一句「执行过程中展示进度卡」。要停用某个规则插件，在「自定义 → 已安装」选择对应插件并禁用。
+
+如果本机已有同名的第三方「Antigravity 中文」入口，安装器会复用旧入口。若要使用本项目的任务卡和工具行计时，请按旧入口自己的卸载方法移除它，再重新安装本项目。
+
+## 升级
+
+直接重新运行新版安装命令即可升级由安装器登记且未在本机修改的插件，再按 **⌘Q** 退出并重新打开「Antigravity 中文」。如果安装提示进度插件未登记或已修改，先按提示备份并移走对应目录，再重新安装。
 
 ## 一键卸载与回退
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.4.0/uninstall.sh | bash
-```
-
-离线时可以运行安装器留在本机的卸载脚本。
+推荐直接运行安装器留在本机的卸载脚本，可离线使用。
 
 ```bash
 bash ~/.gemini/config/antigravity-agent-progress-install/uninstall.sh
 ```
 
-- 想预览卸载范围，在线命令以 `bash -s -- --dry-run` 结尾。本机脚本末尾可直接加 `--dry-run`。
-- 按项目安装时，在线卸载使用 `bash -s -- --workspace "/完整项目路径"`，与安装时指定同一个项目。
-- 卸载会停止本包启动的监视器，移除本包管理的启动入口和插件。修改过的插件目录会移动到备份位置，终端会显示路径。原版 App、聊天历史和预先安装的上游组件会保留。
-- 卸载完成后，按 **⌘Q** 退出当前会话，再点击官方 Antigravity 图标，即可恢复原版界面。
+也可以在线卸载。
 
-运行新版安装命令即可升级由 `v0.2.0` 安装器登记且未在本机修改的插件。如果直接从 `v0.1.0` 升级，先运行 `v0.2.0` 的安装命令登记旧插件，再安装最新版。安装器会提示处理未登记或有本地修改的进度插件。
+```bash
+(
+  set -o pipefail
+  curl -4 -fsSL --connect-timeout 5 --max-time 15 \
+    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.4.0/uninstall.sh | bash
+)
+```
+
+- 想预览卸载范围，在线命令以 `bash -s -- --dry-run` 结尾。本机脚本末尾可直接加 `--dry-run`。
+- 按项目安装时，本机卸载脚本位于项目的 `.agents/antigravity-agent-progress-install/uninstall.sh`，运行时加上 `--workspace "/完整项目路径"`。在线卸载则以 `bash -s -- --workspace "/完整项目路径"` 结尾。
+- 卸载会停止本包启动的监视器，移除本包管理的启动入口和插件，并恢复安装时登记的完整步骤设置。修改过的插件会移动到备份目录，终端会显示路径。
+- 卸载完成后，按 **⌘Q** 退出当前会话，再点击官方 Antigravity 图标，即可恢复原版界面。
