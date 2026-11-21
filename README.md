@@ -39,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-prog
 
 ## 使用
 
-1. 想看中文界面时，在 Finder 的个人「应用程序」目录打开「Antigravity 中文」。若机器已装上游启动器，可继续使用已有图标。切换启动入口前先保存工作并按 **⌘Q** 完全退出。
+1. 想看中文界面时，在 Finder 的「应用程序」（或个人 `~/Applications`）目录打开「Antigravity 中文」。安装器会自动在 `/Applications` 创建指向 `~/Applications/Antigravity 中文.app` 的软链接（无写入权限时会提示手动创建）。若机器已装上游启动器，可继续使用已有图标。切换启动入口前先保存工作并按 **⌘Q** 完全退出。
 2. 在 Antigravity 中新建对话，发送「演示执行进度卡」。演示会查看当前目录、运行一条等待命令并核对结果。也可以在输入框运行 `/progress-card` 技能。
 3. 日常使用时，可以直接让 Agent 处理多阶段任务，或在任务里加一句「执行过程中展示进度卡」。需要停用某个插件时，在「自定义 → 已安装」找到它并选择禁用。
 

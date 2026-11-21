@@ -58,6 +58,19 @@ def write_launcher(app, original, state):
         plistlib.dump(plist, file)
 
 
+def link_system_launcher(app, system_apps):
+    system_link = system_apps / APP_NAME
+    if system_link.exists() or system_link.is_symlink():
+        return
+    try:
+        system_apps.mkdir(parents=True, exist_ok=True)
+        system_link.symlink_to(app)
+        print(f"已创建快捷入口 {system_link} -> {app}")
+    except OSError:
+        print(f"未能自动创建 {system_link}（可能缺少权限），可手动执行：")
+        print(f"  sudo ln -s {shlex.quote(str(app))} {shlex.quote(str(system_link))}")
+
+
 def install(bundle, destination, state, home, include_chinese, include_launcher, system_apps=Path("/Applications")):
     record = state / "install.json"
     tracked = json.loads(record.read_text(encoding="utf-8")) if record.is_file() else {"plugins": {}, "launcher": False}
@@ -133,10 +146,13 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
                 tracked["launcher"] = True
                 pending[app] = staged_app
                 finish_install(bundle, pending, replacements, tracked, state, stage)
+            link_system_launcher(app, system_apps)
         else:
             if include_launcher and launcher_exists:
                 print("复用已有的「Antigravity 中文」入口。")
             finish_install(bundle, pending, replacements, tracked, state, stage)
+            if include_launcher and tracked["launcher"] and is_owned_launcher(app):
+                link_system_launcher(app, system_apps)
 
 
 def finish_install(bundle, pending, replacements, tracked, state, stage):
@@ -203,7 +219,7 @@ def stop_owned_session(state):
     raise RuntimeError("中文入口的监视进程还未退出，请退出 Antigravity 后重试卸载。")
 
 
-def uninstall(destination, state, home, dry_run):
+def uninstall(destination, state, home, dry_run, system_apps=Path("/Applications")):
     record = state / "install.json"
     if not record.is_file():
         print("这个安装位置没有组合包的卸载记录。")
@@ -236,6 +252,14 @@ def uninstall(destination, state, home, dry_run):
 
     app = home / "Applications" / APP_NAME
     if tracked["launcher"] and is_owned_launcher(app):
+        system_link = system_apps / APP_NAME
+        if system_link.is_symlink() and system_link.resolve(strict=False) == app.resolve(strict=False):
+            print(f"移除 {system_link}")
+            if not dry_run:
+                try:
+                    system_link.unlink()
+                except OSError:
+                    print(f"未能自动移除 {system_link}，可手动执行：sudo rm -f {shlex.quote(str(system_link))}")
         print(f"移除 {app}")
         if not dry_run:
             shutil.rmtree(app)

@@ -26,6 +26,7 @@ class InstallationTest(unittest.TestCase):
         self.destination = self.home / ".gemini/config/plugins"
         self.state = self.destination.parent / "antigravity-agent-progress-install"
         self.app = self.home / "Applications/Antigravity 中文.app"
+        self.system_link = self.system_apps / "Antigravity 中文.app"
         self.config = self.destination.parent / "config.json"
         self.config.parent.mkdir(parents=True)
         self.config.write_bytes(b'{"plugins":{"other":{"enabled":true}},"setting":42}\n')
@@ -34,7 +35,7 @@ class InstallationTest(unittest.TestCase):
         PACKAGE["install"](ROOT, self.destination, self.state, self.home, True, True, self.system_apps)
 
     def uninstall(self, dry_run=False):
-        PACKAGE["uninstall"](self.destination, self.state, self.home, dry_run)
+        PACKAGE["uninstall"](self.destination, self.state, self.home, dry_run, self.system_apps)
 
     def test_install_and_uninstall_owned_files(self):
         saved_config = self.config.read_bytes()
@@ -42,6 +43,8 @@ class InstallationTest(unittest.TestCase):
         self.install()
         with (self.app / "Contents/Info.plist").open("rb") as file:
             self.assertEqual(plistlib.load(file)["CFBundleIdentifier"], PACKAGE["LAUNCHER_ID"])
+        self.assertTrue(self.system_link.is_symlink())
+        self.assertEqual(self.system_link.resolve(), self.app.resolve())
         shell = self.app / "Contents/MacOS/launcher"
         subprocess.run(["/bin/bash", "-n", str(shell)], check=True)
         self.assertIn(str(self.official), shell.read_text())
@@ -52,9 +55,11 @@ class InstallationTest(unittest.TestCase):
         self.assertTrue((self.state / "uninstall.sh").is_file())
         self.uninstall(dry_run=True)
         self.assertTrue(self.app.is_dir())
+        self.assertTrue(self.system_link.is_symlink())
         self.uninstall()
         self.uninstall()
         self.assertFalse(self.app.exists())
+        self.assertFalse(self.system_link.is_symlink())
         self.assertFalse(self.state.exists())
         self.assertEqual(list(self.destination.iterdir()), [])
         self.assertEqual(self.config.read_bytes(), saved_config)
