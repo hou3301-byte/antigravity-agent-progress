@@ -10,6 +10,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -45,6 +46,8 @@ TODO_LINE = re.compile(r"^[ \t]*[-*][ \t]+\[([ /xX])\][ \t]+(.+?)[ \t]*$")
 TODO_PROGRESS = re.compile(r"<!--\s*todo:(\d+)/(\d+)(?:\s+(blocked))?\s*-->")
 TODO_DONE = re.compile(r"<!--\s*todo:done\s*-->")
 MARK_TO_STATE = {" ": "pending", "/": "running", "x": "done", "X": "done"}
+BACKGROUND_STARTED = re.compile(r"^Tool is running as a background task with task id: (\S+)\s*$", re.MULTILINE)
+BACKGROUND_FINISHED = re.compile(r'\bsender=(\S+) priority=\S+ content=Task id "\1" finished with result:')
 
 
 INLINE_CODE_SPAN = re.compile(r"`([^`\n]+)`")
@@ -80,7 +83,8 @@ def _extract_todo_events(no_fence):
 
     marker_text = INLINE_CODE.sub(lambda m: " " * len(m.group(0)), no_fence)
     for matched in TODO_PROGRESS.finditer(marker_text):
-        events.append((matched.start(), "progress", (int(matched.group(1)), matched.group(3) == "blocked")))
+        events.append((matched.start(), "progress", (
+            int(matched.group(1)), int(matched.group(2)), matched.group(3) == "blocked")))
     for matched in TODO_DONE.finditer(marker_text):
         events.append((matched.start(), "done", None))
     events.sort(key=lambda entry: entry[0])
@@ -123,17 +127,28 @@ def parse_transcript_todo(transcript_path, cache=None):
             last_user_idx = idx
 
     responses = []
+    background = {}
     for entry in entries[last_user_idx + 1:]:
-        if entry.get("type") != "PLANNER_RESPONSE":
-            continue
         content = entry.get("content")
         if not isinstance(content, str) or not content:
             continue
-        no_fence = FENCED_CODE.sub("", content)
-        responses.append(_extract_todo_events(no_fence))
+        kind = entry.get("type")
+        if kind == "PLANNER_RESPONSE":
+            responses.append(_extract_todo_events(FENCED_CODE.sub("", content)))
+        elif kind == "GENERIC" and entry.get("status") == "RUNNING":
+            match = BACKGROUND_STARTED.search(content)
+            if match:
+                try:
+                    background[match[1]] = datetime.fromisoformat(entry["created_at"].replace("Z", "+00:00")).timestamp()
+                except (KeyError, AttributeError, ValueError, OverflowError):
+                    continue
+        elif kind == "SYSTEM_MESSAGE":
+            for match in BACKGROUND_FINISHED.finditer(content):
+                background.pop(match[1], None)
 
     has_markers = any(kind in {"progress", "done"} for events in responses for _, kind, _ in events)
     items = None
+    sources = {}
     done = False
 
     for events in responses:
@@ -142,10 +157,14 @@ def parse_transcript_todo(transcript_path, cache=None):
                 has_active_mark = any(mark == "/" for mark, _ in payload)
                 if has_active_mark or (items is None and has_markers):
                     items = [{"label": label, "state": MARK_TO_STATE[mark]} for mark, label in payload]
+                    labels = tuple(item["label"] for item in items)
+                    sources[labels] = None
                     done = False
             elif kind == "progress" and items:
-                current_step, is_blocked = payload
-                active_idx = max(0, current_step - 1)
+                current_step, total, is_blocked = payload
+                if total != len(items) or not 1 <= current_step <= total:
+                    continue
+                active_idx = current_step - 1
                 for idx, item in enumerate(items):
                     if idx < active_idx:
                         item["state"] = "done"
@@ -159,7 +178,8 @@ def parse_transcript_todo(transcript_path, cache=None):
                     item["state"] = "done"
                 done = True
 
-    result = {"items": items, "done": done} if items else None
+    result = ({"items": items or [], "done": done, "sources": list(sources), "background_count": len(background),
+               "background_start": min(background.values(), default=None)} if items or background else None)
     if cache is not None:
         cache[cache_key] = (stamp, result)
     return result
@@ -194,15 +214,19 @@ def read_progress(raw_url, brain, cache=None):
     todo = parse_transcript_todo(brain / conversation / ".system_generated/logs/transcript.jsonl", cache)
     items = todo["items"] if todo else []
     done = bool(todo["done"]) if todo else False
-    if not items and not active and running_start is None:
+    background_count = todo["background_count"] if todo else 0
+    if not items and not active and not background_count:
         return None
     return {
         "conversation": conversation,
         "started_at": started_at,
         "active": active,
         "running_start": running_start,
+        "background_count": background_count,
+        "background_start": todo["background_start"] if todo else None,
         "items": items,
         "done": done,
+        "sources": todo["sources"] if todo else [],
     }
 
 

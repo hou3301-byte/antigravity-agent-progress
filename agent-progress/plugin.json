@@ -2,8 +2,8 @@
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "agent-progress",
   "displayName": "执行进度",
-  "version": "0.4.0",
-  "description": "在当前对话中提供 Claude 风格的边做边汇报、流内任务卡与原生工具行实时读秒。",
+  "version": "0.5.0",
+  "description": "在当前对话中查看阶段汇报、可展开的任务清单和实时工具计时。",
   "author": {
     "name": "hou3301-byte",
     "url": "https://github.com/hou3301-byte"

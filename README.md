@@ -4,26 +4,29 @@
 
 [最新版本与发布说明](https://github.com/hou3301-byte/antigravity-agent-progress/releases/latest)
 
+![Antigravity 桌面版实测，原生工具行实时读秒和默认收起的任务状态](assets/execution-preview.png)
+
 ## 功能
 
 | 功能 | 使用效果 |
 | --- | --- |
 | 边做边汇报 | 多步骤任务中，Agent 用简短消息交代当前发现和下一步。连续的短调用可以合并汇报，简单问答直接回答。 |
-| 流内 `TodoWrite` 进度卡 | 三个及以上阶段的任务，或明确要求显示进度卡时，可在聊天中看到待办、进行中、阻塞和完成状态。卡片由清单和阶段标记更新，收到完成标记后自动收起。 |
-| 完整步骤与实时读秒 | 默认展开 `Worked for` 等原生步骤分组，可以手动收起。计时显示在当前运行的原生工具行上，历史步骤可在原对话里查看。 |
+| 流内任务清单 | 三个及以上阶段的任务，或明确要求展示进度时，默认只显示一行当前阶段和完成数。展开后可查看各项状态。完成或停止后收成可回看的摘要。 |
+| 完整步骤与工具详情 | 默认展开本轮的 `Worked for` 等原生步骤分组，可以手动收起。工具调用保留在原对话里，点「工具详情」可展开本轮输出。 |
+| 前台与后台计时 | 前台在原生工具行上读秒。工具转入后台后，状态区显示运行中的后台任务数和耗时。 |
 | 中文界面和中文规则 | 「Antigravity 中文」入口用本地 CDP 翻译界面控件。简体中文规则插件可以独立开关。 |
 
 阶段汇报由插件规则引导。流内任务卡、工具行读秒和步骤自动展开由本项目的「Antigravity 中文」入口提供。它启动官方 App，通过仅监听本机的 CDP 渲染界面增强。监视进程随该次 App 会话退出。
 
 ## 安装
 
-需要 macOS、已安装的 [Antigravity App](https://antigravity.google/download) 和可用的 `/usr/bin/python3`。进度卡已在 Antigravity App 2.33.0 上验证。运行以下命令为当前用户的所有项目安装进度插件、中文规则和中文入口。
+需要 macOS、已安装的 [Antigravity App](https://antigravity.google/download) 和可用的 `/usr/bin/python3`。v0.5.0 已在 Antigravity 桌面版 2.34.0 上实测。运行以下命令为当前用户的所有项目安装进度插件、中文规则和中文入口。
 
 ```bash
 (
   set -o pipefail
   curl -4 -fsSL --connect-timeout 5 --max-time 15 \
-    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.4.0/install.sh | bash
+    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.5.0/install.sh | bash
 )
 ```
 
@@ -42,7 +45,7 @@
 如果脚本下载仍然超时，可以从 GitHub 克隆同一版本，再运行本地安装脚本。
 
 ```bash
-git clone --depth 1 --branch v0.4.0 https://github.com/hou3301-byte/antigravity-agent-progress.git &&
+git clone --depth 1 --branch v0.5.0 https://github.com/hou3301-byte/antigravity-agent-progress.git &&
   bash antigravity-agent-progress/install.sh
 ```
 
@@ -51,8 +54,10 @@ git clone --depth 1 --branch v0.4.0 https://github.com/hou3301-byte/antigravity-
 ## 使用
 
 1. 保存工作并按 **⌘Q** 完全退出当前 Antigravity，再从 Finder 的「应用程序」打开「Antigravity 中文」。如果安装器无法写入 `/Applications`，可从个人的 `~/Applications` 打开。
-2. 新建对话，发送「演示执行进度卡」，或选用 `/progress-card` 技能。演示会检查当前目录、等待 8 秒并核对结果。等待时可以看工具行计时，最终回复出现后卡片会自动收起。
+2. 新建对话，发送「演示执行进度卡」，或选用 `/progress-card` 技能。演示会检查当前目录、等待 8 秒并核对结果。等待时可以看工具行计时，结束后可展开「已完成」摘要回看清单。
 3. 日常可以直接交给 Agent 一个多阶段任务，或在任务里加一句「执行过程中展示进度卡」。要停用某个规则插件，在「自定义 → 已安装」选择对应插件并禁用。
+
+点「任务」可展开或收起任务清单，点「工具详情」可切换本轮原生工具输出。焦点在输入框外时，也可分别用 `Ctrl+T` 和 `Ctrl+O`。点击停止后，任务区会标记「已停止」，已完成项仍可展开查看。
 
 如果本机已有同名的第三方「Antigravity 中文」入口，安装器会复用旧入口。若要使用本项目的任务卡和工具行计时，请按旧入口自己的卸载方法移除它，再重新安装本项目。
 
@@ -74,7 +79,7 @@ bash ~/.gemini/config/antigravity-agent-progress-install/uninstall.sh
 (
   set -o pipefail
   curl -4 -fsSL --connect-timeout 5 --max-time 15 \
-    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.4.0/uninstall.sh | bash
+    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.5.0/uninstall.sh | bash
 )
 ```
 

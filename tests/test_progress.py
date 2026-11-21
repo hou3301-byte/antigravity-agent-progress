@@ -82,6 +82,7 @@ class ProgressTest(unittest.TestCase):
             self.assertTrue(snap["active"])
             self.assertEqual(snap["running_start"], 102.0)
             self.assertFalse(snap["done"])
+            self.assertEqual(snap["sources"], [("检查 config.json 配置", "改造核心代码", "运行单元测试")])
             self.assertEqual(
                 snap["items"],
                 [
@@ -109,6 +110,17 @@ class ProgressTest(unittest.TestCase):
             self.assertEqual([i["state"] for i in snap["items"]], ["done", "running", "pending"])
             self.assertFalse(snap["done"])
 
+            # A replacement plan still owns the earlier checklist in the same turn.
+            write_lines([
+                {"type": "USER_INPUT", "content": "帮我重构"},
+                {"type": "PLANNER_RESPONSE", "content": "- [ ] 草案A\n- [ ] 草案B\n- [ ] 草案C"},
+                {"type": "PLANNER_RESPONSE", "content": "- [/] A\n- [ ] B\n- [ ] C"},
+                {"type": "PLANNER_RESPONSE", "content": "<!-- todo:2/3 -->"},
+            ])
+            snap = LAUNCHER["read_progress"](f"https://127.0.0.1:8000/c/{conv}", brain, cache)
+            self.assertEqual(snap["sources"], [("草案A", "草案B", "草案C"), ("A", "B", "C")])
+            self.assertEqual([item["state"] for item in snap["items"]], ["done", "running", "pending"])
+
             # Blocked in phase 3
             write_lines([
                 {"type": "USER_INPUT", "content": "帮我重构"},
@@ -118,7 +130,7 @@ class ProgressTest(unittest.TestCase):
             snap = LAUNCHER["read_progress"](f"https://127.0.0.1:8000/c/{conv}", brain, cache)
             self.assertEqual([i["state"] for i in snap["items"]], ["done", "done", "blocked"])
 
-            # Done hides card
+            # The completed checklist remains available to expand.
             write_lines([
                 {"type": "USER_INPUT", "content": "帮我重构"},
                 {"type": "PLANNER_RESPONSE", "content": "- [/] A\n- [ ] B\n- [ ] C"},
@@ -138,6 +150,39 @@ class ProgressTest(unittest.TestCase):
             ])
             snap = LAUNCHER["read_progress"](f"https://127.0.0.1:8000/c/{conv}", brain, cache)
             self.assertIsNone(snap)
+
+    def test_background_clock_clears_on_completion_and_ignores_invalid_phase_markers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            conversation = "11111111-2222-3333-4444-555555555555"
+            brain = Path(temporary)
+            logs = brain / conversation / ".system_generated/logs"
+            logs.mkdir(parents=True)
+            transcript = logs / "transcript.jsonl"
+            task = f"{conversation}/task-4"
+            entries = [
+                {"type": "USER_INPUT", "content": "运行验证"},
+                {"type": "PLANNER_RESPONSE", "content": "- [/] A\n- [ ] B\n- [ ] C\n<!-- todo:2/4 -->\n<!-- todo:8/3 -->"},
+                {"type": "GENERIC", "status": "RUNNING", "created_at": "2026-11-21T04:23:59Z",
+                 "content": f"Tool is running as a background task with task id: {task}\n"},
+            ]
+
+            def snapshot():
+                transcript.write_text("\n".join(map(json.dumps, entries)) + "\n", encoding="utf-8")
+                return LAUNCHER["read_progress"](f"https://127.0.0.1:8000/c/{conversation}", brain)
+
+            starting = snapshot()
+            self.assertEqual(starting["background_count"], 1)
+            self.assertEqual(starting["background_start"], 1795235039.0)
+            self.assertEqual([item["state"] for item in starting["items"]], ["running", "pending", "pending"])
+
+            entries.append({"type": "PLANNER_RESPONSE", "content": f'Task id "{task}" finished with result:'})
+            self.assertEqual(snapshot()["background_count"], 1)
+
+            entries.append({"type": "SYSTEM_MESSAGE",
+                            "content": f'[Message] sender={task} priority=MESSAGE_PRIORITY_HIGH content=Task id "{task}" finished with result:'})
+            finished = snapshot()
+            self.assertEqual(finished["background_count"], 0)
+            self.assertIsNone(finished["background_start"])
 
 
 if __name__ == "__main__":

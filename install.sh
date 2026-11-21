@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repository=hou3301-byte/antigravity-agent-progress
-release=v0.4.0
+release=v0.5.0
 install_dir="$HOME/.gemini/config/plugins"
 include_chinese=1
 include_launcher=1
