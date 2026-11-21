@@ -1,31 +1,40 @@
 .agy-progress-panel {
-  --agy-border: var(--border, color-mix(in srgb, currentColor 16%, transparent));
-  --agy-muted: var(--muted-foreground, color-mix(in srgb, currentColor 72%, transparent));
-  --agy-accent: var(--primary, LinkText);
-  --agy-success: var(--success, light-dark(#277647, #8ccba2));
-  --agy-error: var(--destructive, light-dark(#a23232, #f3a0a0));
-  margin: .5rem;
+  --agy-border: var(--border, color-mix(in srgb, currentColor 14%, transparent));
+  --agy-muted: var(--muted-foreground, color-mix(in srgb, currentColor 65%, transparent));
+  --agy-accent: var(--primary, #3b82f6);
+  --agy-success: var(--success, light-dark(#16a34a, #4ade80));
+  --agy-error: var(--destructive, light-dark(#dc2626, #f87171));
+  margin: .65rem 0 .25rem;
   color: var(--foreground, CanvasText);
   font-size: .875rem;
   line-height: 1.45;
 }
+
 .agy-progress-card {
-  padding: .65rem .8rem;
+  padding: .75rem .9rem;
   border: 1px solid var(--agy-border);
-  border-radius: .625rem;
-  background: var(--card, color-mix(in srgb, currentColor 4%, transparent));
+  border-radius: 10px;
+  background: var(--card, color-mix(in srgb, currentColor 3.5%, transparent));
 }
-.agy-progress-card > header, .agy-progress-panel li, .agy-tool-activity > summary {
+
+.agy-progress-card > header,
+.agy-progress-card li {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: .65rem;
 }
+
+.agy-progress-card > header strong {
+  font-weight: 600;
+  font-size: .85rem;
+}
+
 .agy-progress-meter {
   display: block;
   width: 100%;
   height: 3px;
-  margin: .5rem 0 .4rem;
+  margin: .5rem 0 .45rem;
   appearance: none;
   border: 0;
   border-radius: 3px;
@@ -33,55 +42,92 @@
   color: var(--agy-accent);
   accent-color: currentColor;
 }
+
 .agy-progress-meter::-webkit-progress-bar { background: var(--agy-border); }
 .agy-progress-meter::-webkit-progress-value { background: currentColor; }
-.agy-progress-panel ul { margin: 0; padding: 0; list-style: none; }
-.agy-progress-panel li { padding: .2rem 0; }
-.agy-progress-panel li > :first-child { min-width: 0; overflow-wrap: anywhere; }
-.agy-progress-panel li > :last-child { flex: none; }
-.agy-task-label { display: flex; align-items: baseline; gap: .55rem; }
-.agy-task-icon { width: 1em; text-align: center; flex: none; color: var(--agy-muted); }
-.agy-task-icon[data-state="done"] { color: var(--agy-success); }
-.agy-task-icon[data-state="running"] { color: var(--agy-accent); }
-.agy-task-icon[data-state="blocked"] { color: var(--agy-error); }
-.agy-progress-status, .agy-progress-native {
-  color: var(--agy-muted, var(--muted-foreground, CanvasText));
+
+.agy-progress-card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agy-progress-card li {
+  padding: .22rem 0;
+}
+
+.agy-progress-card li > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agy-progress-card li > :last-child {
+  flex: none;
+}
+
+.agy-task-label {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+}
+
+.agy-task-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--agy-muted);
   font-size: .8rem;
+}
+
+.agy-task-icon[data-state="done"] { color: var(--agy-success); }
+.agy-task-icon[data-state="blocked"] { color: var(--agy-error); font-weight: 700; }
+
+.agy-task-icon[data-state="running"] {
+  position: relative;
+  color: transparent;
+}
+
+.agy-task-icon[data-state="running"]::after,
+.agy-live-dot {
+  content: '';
+  display: inline-block;
+  width: .45rem;
+  height: .45rem;
+  border-radius: 999px;
+  background: var(--agy-accent);
+  animation: agy-pulse 1.2s ease-in-out infinite;
+}
+
+.agy-progress-status {
+  color: var(--agy-muted);
+  font-size: .78rem;
   font-variant-numeric: tabular-nums;
   flex: none;
 }
-.agy-progress-status[data-state="running"], .agy-progress-native { color: var(--primary, LinkText); }
-.agy-progress-status[data-state="error"], .agy-progress-status[data-state="blocked"] { color: var(--agy-error); }
-.agy-progress-native { margin-inline-start: .5rem; white-space: nowrap; }
-.agy-tool-activity { margin-block-start: .3rem; }
-.agy-tool-activity > summary {
-  min-height: 2rem;
-  padding: .2rem .55rem;
-  border-radius: .4rem;
-  cursor: pointer;
-  list-style: none;
+
+.agy-progress-status[data-state="running"] { color: var(--agy-accent); }
+.agy-progress-status[data-state="blocked"] { color: var(--agy-error); }
+
+.agy-live-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin-inline-start: .5rem;
+  color: var(--agy-accent);
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.agy-tool-activity > summary::-webkit-details-marker { display: none; }
-.agy-tool-activity > summary:hover { background: var(--muted, color-mix(in srgb, currentColor 6%, transparent)); }
-.agy-tool-activity > summary:focus-visible { outline: 2px solid var(--agy-accent); outline-offset: 1px; }
-.agy-tool-label { display: flex; align-items: center; gap: .55rem; white-space: nowrap; }
-.agy-tool-label::before {
-  content: '';
-  width: .39rem;
-  height: .39rem;
-  border-block-end: 1px solid currentColor;
-  border-inline-end: 1px solid currentColor;
-  transform: rotate(-45deg);
+
+@keyframes agy-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .45; transform: scale(.82); }
 }
-.agy-tool-activity[open] .agy-tool-label::before { transform: rotate(45deg); }
-.agy-tool-recent { display: flex; align-items: center; justify-content: flex-end; gap: .45rem; min-width: 0; }
-.agy-tool-recent code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agy-progress-panel code { font-size: .8rem; }
-.agy-tool-activity > .agy-tool-list {
-  max-height: 9.5rem;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: .25rem .55rem 0;
-  border-block-start: 1px solid var(--agy-border);
+
+.agy-progress-panel [hidden],
+.agy-todo-source-hidden {
+  display: none !important;
 }
-.agy-progress-panel [hidden], .agy-progress-replaced { display: none !important; }

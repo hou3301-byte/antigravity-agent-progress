@@ -58,6 +58,78 @@ def write_launcher(app, original, state):
         plistlib.dump(plist, file)
 
 
+def write_json_atomic(path, data):
+    content = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    with tempfile.NamedTemporaryFile(dir=path.parent, mode="w", encoding="utf-8", delete=False) as file:
+        temp_path = Path(file.name)
+        try:
+            file.write(content)
+            file.close()
+            os.replace(temp_path, path)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
+
+
+def read_step_unlock_backup(config_path):
+    if not config_path.is_file() or config_path.is_symlink():
+        return None
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    user_settings = data.get("userSettings")
+    had_user_settings = isinstance(user_settings, dict)
+    had_key = had_user_settings and "verboseConversationSteps" in user_settings
+    previous = user_settings.get("verboseConversationSteps") if had_key else None
+    return {"had_user_settings": had_user_settings, "had_key": had_key, "previous": previous}
+
+
+def apply_step_unlock(config_path):
+    if not config_path.is_file() or config_path.is_symlink():
+        return
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, dict):
+        return
+    user_settings = data.get("userSettings")
+    if not isinstance(user_settings, dict):
+        user_settings = {}
+        data["userSettings"] = user_settings
+    if user_settings.get("verboseConversationSteps") is True:
+        return
+    user_settings["verboseConversationSteps"] = True
+    write_json_atomic(config_path, data)
+
+
+def restore_step_unlock(config_path, info, dry_run):
+    if not isinstance(info, dict) or not config_path.is_file() or config_path.is_symlink():
+        return
+    print(f"还原 {config_path} 的 verboseConversationSteps")
+    if dry_run:
+        return
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, dict):
+        return
+    user_settings = data.get("userSettings")
+    if not isinstance(user_settings, dict):
+        return
+    if info.get("had_key"):
+        user_settings["verboseConversationSteps"] = info.get("previous")
+    else:
+        user_settings.pop("verboseConversationSteps", None)
+    if not info.get("had_user_settings") and not user_settings:
+        data.pop("userSettings", None)
+    write_json_atomic(config_path, data)
+
+
 def link_system_launcher(app, system_apps):
     system_link = system_apps / APP_NAME
     if system_link.exists() or system_link.is_symlink():
@@ -86,6 +158,18 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
 
     destination.mkdir(parents=True, exist_ok=True)
     state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    is_global = destination.resolve() == (home / ".gemini/config/plugins").resolve()
+    config_path = state.parent / "config.json"
+    unlock_steps = False
+    if is_global:
+        if "step_unlock" not in tracked:
+            backup = read_step_unlock_backup(config_path)
+            if backup is not None:
+                tracked["step_unlock"] = backup
+                unlock_steps = True
+        else:
+            unlock_steps = config_path.is_file()
+
     with tempfile.TemporaryDirectory(prefix=".staging-", dir=state) as temp:
         stage = Path(temp)
         sources = [bundle / PROGRESS]
@@ -153,6 +237,8 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
             finish_install(bundle, pending, replacements, tracked, state, stage)
             if include_launcher and tracked["launcher"] and is_owned_launcher(app):
                 link_system_launcher(app, system_apps)
+        if unlock_steps:
+            apply_step_unlock(config_path)
 
 
 def finish_install(bundle, pending, replacements, tracked, state, stage):
@@ -263,6 +349,7 @@ def uninstall(destination, state, home, dry_run, system_apps=Path("/Applications
         print(f"移除 {app}")
         if not dry_run:
             shutil.rmtree(app)
+    restore_step_unlock(state.parent / "config.json", tracked.get("step_unlock"), dry_run)
     if not dry_run:
         shutil.rmtree(state)
         print("卸载完成。若 Antigravity 还在运行，按 ⌘Q 退出，再点官方 Antigravity 图标。")

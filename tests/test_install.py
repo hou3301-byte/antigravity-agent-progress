@@ -41,6 +41,8 @@ class InstallationTest(unittest.TestCase):
         saved_config = self.config.read_bytes()
         self.install()
         self.install()
+        installed_config = json.loads(self.config.read_text())
+        self.assertTrue(installed_config["userSettings"]["verboseConversationSteps"])
         with (self.app / "Contents/Info.plist").open("rb") as file:
             self.assertEqual(plistlib.load(file)["CFBundleIdentifier"], PACKAGE["LAUNCHER_ID"])
         self.assertTrue(self.system_link.is_symlink())
@@ -56,13 +58,14 @@ class InstallationTest(unittest.TestCase):
         self.uninstall(dry_run=True)
         self.assertTrue(self.app.is_dir())
         self.assertTrue(self.system_link.is_symlink())
+        self.assertTrue(json.loads(self.config.read_text())["userSettings"]["verboseConversationSteps"])
         self.uninstall()
         self.uninstall()
         self.assertFalse(self.app.exists())
         self.assertFalse(self.system_link.is_symlink())
         self.assertFalse(self.state.exists())
         self.assertEqual(list(self.destination.iterdir()), [])
-        self.assertEqual(self.config.read_bytes(), saved_config)
+        self.assertEqual(json.loads(self.config.read_text()), json.loads(saved_config.decode()))
         self.assertEqual(self.official.read_bytes(), b"official executable")
 
     def test_keep_existing_launcher_and_chinese_plugin(self):

@@ -39,24 +39,171 @@ def page_address(target, port):
     return f"{page.scheme}://{page.netloc}", websocket.path
 
 
-def read_progress(raw_url, brain):
+FENCED_CODE = re.compile(r"```[\s\S]*?```|~~~[\s\S]*?~~~")
+INLINE_CODE = re.compile(r"`[^`]*`")
+TODO_LINE = re.compile(r"^[ \t]*[-*][ \t]+\[([ /xX])\][ \t]+(.+?)[ \t]*$")
+TODO_PROGRESS = re.compile(r"<!--\s*todo:(\d+)/(\d+)(?:\s+(blocked))?\s*-->")
+TODO_DONE = re.compile(r"<!--\s*todo:done\s*-->")
+MARK_TO_STATE = {" ": "pending", "/": "running", "x": "done", "X": "done"}
+
+
+INLINE_CODE_SPAN = re.compile(r"`([^`\n]+)`")
+
+
+def _clean_label(text):
+    text = INLINE_CODE_SPAN.sub(r"\1", text)
+    return " ".join(text.split())[:160]
+
+
+def _extract_todo_events(no_fence):
+    """Extract ordered checklist blocks and hidden todo marker events from markdown."""
+    events = []
+    offset = 0
+    block = []
+    block_start = 0
+
+    def flush_block():
+        if 2 <= len(block) <= 8:
+            events.append((block_start, "list", list(block)))
+        block.clear()
+
+    for line in no_fence.splitlines(keepends=True):
+        matched = TODO_LINE.match(line.rstrip("\r\n"))
+        if matched:
+            if not block:
+                block_start = offset
+            block.append((matched.group(1), _clean_label(matched.group(2))))
+        else:
+            flush_block()
+        offset += len(line)
+    flush_block()
+
+    marker_text = INLINE_CODE.sub(lambda m: " " * len(m.group(0)), no_fence)
+    for matched in TODO_PROGRESS.finditer(marker_text):
+        events.append((matched.start(), "progress", (int(matched.group(1)), matched.group(3) == "blocked")))
+    for matched in TODO_DONE.finditer(marker_text):
+        events.append((matched.start(), "done", None))
+    events.sort(key=lambda entry: entry[0])
+    return events
+
+
+def parse_transcript_todo(transcript_path, cache=None):
+    """Parse the active turn's TodoWrite checklist and hidden progress markers from transcript.jsonl."""
+    path = Path(transcript_path)
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    stamp = (stat.st_mtime_ns, stat.st_size)
+    cache_key = str(path)
+    if cache is not None:
+        cached = cache.get(cache_key)
+        if cached and cached[0] == stamp:
+            return cached[1]
+
+    entries = []
+    try:
+        with path.open(encoding="utf-8", errors="ignore") as stream:
+            for raw_line in stream:
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    entry = json.loads(raw_line)
+                except ValueError:
+                    continue
+                if isinstance(entry, dict):
+                    entries.append(entry)
+    except OSError:
+        return None
+
+    last_user_idx = -1
+    for idx, entry in enumerate(entries):
+        if entry.get("type") == "USER_INPUT":
+            last_user_idx = idx
+
+    responses = []
+    for entry in entries[last_user_idx + 1:]:
+        if entry.get("type") != "PLANNER_RESPONSE":
+            continue
+        content = entry.get("content")
+        if not isinstance(content, str) or not content:
+            continue
+        no_fence = FENCED_CODE.sub("", content)
+        responses.append(_extract_todo_events(no_fence))
+
+    has_markers = any(kind in {"progress", "done"} for events in responses for _, kind, _ in events)
+    items = None
+    done = False
+
+    for events in responses:
+        for _, kind, payload in events:
+            if kind == "list":
+                has_active_mark = any(mark == "/" for mark, _ in payload)
+                if has_active_mark or (items is None and has_markers):
+                    items = [{"label": label, "state": MARK_TO_STATE[mark]} for mark, label in payload]
+                    done = False
+            elif kind == "progress" and items:
+                current_step, is_blocked = payload
+                active_idx = max(0, current_step - 1)
+                for idx, item in enumerate(items):
+                    if idx < active_idx:
+                        item["state"] = "done"
+                    elif idx == active_idx:
+                        item["state"] = "blocked" if is_blocked else "running"
+                    else:
+                        item["state"] = "pending"
+                done = False
+            elif kind == "done" and items:
+                for item in items:
+                    item["state"] = "done"
+                done = True
+
+    result = {"items": items, "done": done} if items else None
+    if cache is not None:
+        cache[cache_key] = (stamp, result)
+    return result
+
+
+def read_progress(raw_url, brain, cache=None):
     route = urllib.parse.urlsplit(raw_url).path
     match = re.fullmatch(r"/c/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})", route)
     if not match:
         return None
+    conversation = match[1]
+    started_at = 0
+    active = False
+    running_start = None
+    state_file = brain / conversation / ".system_generated/agent-progress/state.json"
     try:
-        conversation = match[1]
-        file = brain / conversation / ".system_generated/agent-progress/state.json"
-        with file.open(encoding="utf-8") as stream:
+        with state_file.open(encoding="utf-8") as stream:
             state = json.loads(stream.read(128 * 1024))
-        if not isinstance(state.get("started_at"), (int, float)):
-            return None
-        tools = state["tools"]
-        visible_tools = [tool for tool in tools[:-8] if tool["state"] == "running"] + tools[-8:]
-        return {"conversation": conversation, "started_at": state["started_at"], "run": state["run"],
-                "items": state["items"], "tools": visible_tools, "active": state["active"]}
-    except (OSError, ValueError, AttributeError, KeyError, TypeError):
+        if isinstance(state, dict):
+            if isinstance(state.get("started_at"), (int, float)):
+                started_at = state["started_at"]
+            active = bool(state.get("active"))
+            running = state.get("running")
+            if active and isinstance(running, list):
+                starts = [item["start"] for item in running
+                          if isinstance(item, dict) and isinstance(item.get("start"), (int, float))]
+                if starts:
+                    running_start = starts[-1]
+    except (OSError, ValueError, TypeError):
+        pass
+
+    todo = parse_transcript_todo(brain / conversation / ".system_generated/logs/transcript.jsonl", cache)
+    items = todo["items"] if todo else []
+    done = bool(todo["done"]) if todo else False
+    if not items and not active and running_start is None:
         return None
+    return {
+        "conversation": conversation,
+        "started_at": started_at,
+        "active": active,
+        "running_start": running_start,
+        "items": items,
+        "done": done,
+    }
 
 
 def update_page(port, address, overlay, fingerprint, progress=None):
@@ -89,6 +236,7 @@ def open_session(executable, resources):
     overlay = translation + "\n;\n" + progress.replace("/*__AGY_PROGRESS_CSS__*/ ''", json.dumps(stylesheet))
     fingerprint = hashlib.sha256(overlay.encode()).hexdigest()[:16]
     brain = Path.home() / ".gemini/antigravity/brain"
+    transcript_cache = {}
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -112,10 +260,10 @@ def open_session(executable, resources):
             try:
                 address = page_address(target, port)
                 if address:
-                    update_page(port, address, overlay, fingerprint, read_progress(target["url"], brain))
+                    update_page(port, address, overlay, fingerprint, read_progress(target["url"], brain, transcript_cache))
             except (OSError, ValueError, EOFError, RuntimeError):
                 continue
-        time.sleep(1)
+        time.sleep(0.5)
 
 
 def main(executable, state):

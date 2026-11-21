@@ -8,23 +8,25 @@
 
 | 功能 | 使用效果 |
 | --- | --- |
-| 边做边汇报 | Agent 在多阶段任务开始前发一条进度消息，在有实质发现、切换阶段或遇到阻塞时继续汇报。简单问答直接回答。 |
-| 聊天内的任务卡 | 用同一张卡显示待办、进行中、完成和阻塞。三阶段及以上的任务或明确要求显示进度卡时启用。 |
-| 工具调用与计时 | 进度卡显示最近的工具调用、运行中的计时，以及返回、失败或中断状态。异步命令显示该次工具调用的耗时。 |
+| 边做边汇报 | Agent 每次调工具前用 1–2 句短话讲清「刚查到什么、下一步干什么」，形成「一句进展 → 一行可展开工具摘要 → 下一句进展」的 Claude 风格叙事流。简单问答直接回答。 |
+| 流内 `TodoWrite` 进度卡 | 三阶段及以上任务开场输出三态清单，由前端直接渲染为流内进度卡片；阶段推进依靠隐形 `<!-- todo:N/M -->` 注释驱动，零工具调用，完成后卡片自动消失。 |
+| 完整步骤与实时读秒 | 自动解锁完整步骤展示并展开回合末的 `Worked for` 分组；正在执行的原生工具行直接显示蓝色脉冲圆点与实时读秒，移除多余的底部工具活动栏。 |
 | 中文界面和中文规则 | 「Antigravity 中文」入口用本地 CDP 翻译界面控件。简体中文规则插件可以独立开关。 |
 
-进度功能使用 Antigravity 的原生规则、hooks 和内联组件，官方图标启动的会话也能使用。CDP 监视器只由中文入口启动，随该次 App 会话结束。
+进度功能使用 Antigravity 的原生规则与流内渲染，不改动官方 App 本体。CDP 监视器只由中文入口启动，随该次 App 会话结束。
 
-### 0.3.0 版本特性
+### 0.4.0 版本特性
 
-安装后退出 Antigravity，打开「Antigravity 中文」。这个入口会在当前对话自动展开 `Worked for` 和进度分组，用户仍可手动收起。任务卡聚焦待办和完成度，独立的工具活动条显示当前或最近一次调用和耗时。活动条默认收起，展开可看最近 8 条。普通启动入口使用插件提供的阶段消息和内联卡片。
+- **零工具调用的流内 `TodoWrite` 卡片**：开场三态 Markdown 清单自动收编为流内卡片并隐藏重复原始列表；隐形 `<!-- todo:N/M -->` 推进进度，`<!-- todo:done -->` 完成后自动消失。
+- **纯正的原生工具行读秒**：彻底移除冗余的底部「工具活动」条，蓝色脉冲圆点与读秒直接附着在正在执行的原生工具行上。
+- **完整步骤自动解锁**：安装全局包时自动开启 `verboseConversationSteps` 并自动展开 `Worked for` 分组；一键卸载时无损还原原配置。
 
 ## 安装
 
 需要 macOS、已安装的 [Antigravity App](https://antigravity.google/download) 和可用的 `/usr/bin/python3`。进度卡已在 Antigravity App 2.33.0 上验证。运行以下命令为当前用户的所有项目安装进度插件、中文规则和中文入口。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.3.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.4.0/install.sh | bash
 ```
 
 可以在上面命令的 `bash` 后追加以下选项。
@@ -46,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-prog
 ## 一键卸载与回退
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.3.0/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.4.0/uninstall.sh | bash
 ```
 
 离线时可以运行安装器留在本机的卸载脚本。
