@@ -1,9 +1,11 @@
 import json
 import runpy
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +17,39 @@ LAUNCHER = runpy.run_path(str(ROOT / "scripts/launcher.py"))
 
 
 class ProgressTest(unittest.TestCase):
+    def test_update_check_uses_a_two_hour_cache_and_compares_release_versions(self):
+        check = LAUNCHER["check_release_update"]
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "release-check.json"
+            checked_at = 1000
+            next_check = checked_at + 7200
+            with patch.object(LAUNCHER["time"], "time", return_value=checked_at):
+                with patch.dict(check.__globals__, {"fetch_release_tag": lambda: "v0.10.0"}):
+                    self.assertEqual(check(cache, (0, 9, 0)), ("v0.10.0", next_check))
+            with patch.object(LAUNCHER["time"], "time", return_value=next_check - 1):
+                with patch.dict(check.__globals__, {"fetch_release_tag": lambda: self.fail("cache missed")}):
+                    self.assertEqual(check(cache, (0, 9, 0)), ("v0.10.0", next_check))
+                    self.assertEqual(check(cache, (0, 10, 0)), (None, next_check))
+                    self.assertEqual(check(cache, (0, 11, 0)), (None, next_check))
+
+            def offline():
+                raise subprocess.TimeoutExpired("curl", 6)
+
+            with patch.object(LAUNCHER["time"], "time", return_value=next_check):
+                with patch.dict(check.__globals__, {"fetch_release_tag": offline}):
+                    self.assertEqual(check(cache, (0, 9, 0)), ("v0.10.0", next_check + 7200))
+            self.assertEqual(json.loads(cache.read_text())["checked_at"], next_check)
+
+    def test_release_check_rejects_drafts_prereleases_and_nonversion_tags(self):
+        fetch = LAUNCHER["fetch_release_tag"]
+        stable = {"tag_name": "v0.10.0", "draft": False, "prerelease": False}
+        for patch_data, expected in [({}, "v0.10.0"), ({"draft": True}, None), ({"prerelease": True}, None),
+                                     ({"tag_name": "v0.10.0-beta"}, None), ({"tag_name": "../../etc"}, None)]:
+            with self.subTest(patch_data=patch_data):
+                response = subprocess.CompletedProcess([], 0, stdout=json.dumps({**stable, **patch_data}).encode())
+                with patch.object(subprocess, "run", return_value=response):
+                    self.assertEqual(fetch(), expected)
+
     def test_hook_lifecycle_tracks_only_active_and_running_steps(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary).resolve()
@@ -37,19 +72,36 @@ class ProgressTest(unittest.TestCase):
             self.assertNotIn("private-secret", state_file.read_text())
 
             send("post", stepIdx=4, toolCall=tool)
+            send("pre", stepIdx=6, toolCall=tool)
+            send("post", stepIdx=6, toolCall={"name": "run_command", "args": {"CommandLine": "cat pytest.ini"}})
+            self.assertFalse(read().get("has_validation", False))
             send("invoke", invocationNum=1)
             self.assertEqual(read()["started_at"], turn)
             self.assertEqual(read()["running"], [])
 
             send("pre", stepIdx=5, toolCall=tool)
-            send("stop", fullyIdle=True)
+            send("post", stepIdx=5, error="private error detail",
+                 toolCall={"name": "run_command", "args": {"CommandLine": "python -m pytest private-test-path"}})
+            self.assertTrue(read()["had_failure"])
+            self.assertTrue(read()["has_validation"])
+            self.assertNotIn("private", state_file.read_text())
+            send("stop", fullyIdle=False, terminationReason="model_stop")
+            self.assertTrue(read()["active"])
+            self.assertTrue(read()["waiting_background"])
+            self.assertEqual(read()["outcome"], "ended")
+            send("stop", fullyIdle=True, terminationReason="error", error="private detail")
             self.assertFalse(read()["active"])
+            self.assertFalse(read().get("waiting_background", False))
+            self.assertEqual(read()["outcome"], "failed")
+            self.assertNotIn("private", state_file.read_text())
             self.assertEqual(read()["running"], [])
             self.assertEqual(list(directory.glob("agent-progress-*.html")), [])
 
             send("invoke", invocationNum=0)
             self.assertGreater(read()["started_at"], turn)
             self.assertTrue(read()["active"])
+            self.assertFalse(read().get("had_failure", False))
+            self.assertFalse(read().get("has_validation", False))
 
     def test_transcript_todo_parsing_and_turn_reset(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -109,6 +161,21 @@ class ProgressTest(unittest.TestCase):
             snap = LAUNCHER["read_progress"](f"https://127.0.0.1:8000/c/{conv}", brain, cache)
             self.assertEqual([i["state"] for i in snap["items"]], ["done", "running", "pending"])
             self.assertFalse(snap["done"])
+
+            write_lines([
+                {"type": "USER_INPUT", "content": "帮我重构"},
+                {"type": "PLANNER_RESPONSE", "content": "- [/] A\n- [ ] B\n- [ ] C"},
+                {"type": "PLANNER_RESPONSE", "content": "<!-- todo:3/3 -->"},
+                {"type": "PLANNER_RESPONSE", "content": "验证失败，重新修复。<!-- todo:2/3 -->"},
+            ])
+            snap = LAUNCHER["read_progress"](f"https://127.0.0.1:8000/c/{conv}", brain, cache)
+            self.assertEqual([i["state"] for i in snap["items"]], ["done", "running", "recheck"])
+
+            with transcript.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"type": "PLANNER_RESPONSE", "content": "- [x] A\n- [x] B\n- [x] C"}) + "\n")
+            snap = LAUNCHER["read_progress"](f"https://127.0.0.1:8000/c/{conv}", brain, cache)
+            self.assertTrue(snap["done"])
+            self.assertEqual([i["state"] for i in snap["items"]], ["done", "done", "done"])
 
             # A replacement plan still owns the earlier checklist in the same turn.
             write_lines([

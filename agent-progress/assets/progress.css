@@ -24,7 +24,7 @@
   display: none !important;
 }
 
-.agy-progress-panel:has(.agy-progress-toggle[hidden]):has(.agy-progress-fallback[hidden]) { width: max-content; }
+.agy-progress-panel:has(.agy-progress-toggle[hidden]):has(.agy-progress-fallback[hidden]) { width: fit-content; }
 
 .agy-progress-header {
   display: flex;
@@ -94,9 +94,12 @@
 }
 
 .agy-progress-panel[data-phase="done"] .agy-progress-current { color: var(--agy-complete); }
-.agy-progress-panel[data-phase="paused"] .agy-progress-current,
+.agy-progress-panel[data-phase="ended"] .agy-progress-current,
+.agy-progress-panel[data-phase="waiting"] .agy-progress-current,
+.agy-progress-panel[data-phase="limit"] .agy-progress-current,
 .agy-progress-panel[data-phase="background"] .agy-progress-current { color: var(--agy-attention); }
 .agy-progress-panel[data-phase="blocked"] .agy-progress-current,
+.agy-progress-panel[data-phase="failed"] .agy-progress-current,
 .agy-progress-panel[data-phase="canceled"] .agy-progress-current { color: var(--agy-error); }
 
 .agy-progress-meter {
@@ -116,7 +119,9 @@
 .agy-progress-meter > span[data-state="done"] { background: var(--agy-complete); }
 .agy-progress-meter > span[data-state="running"] { background: var(--agy-active); }
 .agy-progress-meter > span[data-state="blocked"] { background: var(--agy-error); }
-.agy-progress-panel[data-phase="paused"] .agy-progress-meter > span[data-state="running"] { background: var(--agy-attention); }
+.agy-progress-meter > span[data-state="recheck"] { background: var(--agy-attention); }
+.agy-progress-panel[data-phase="ended"] .agy-progress-meter > span[data-state="running"],
+.agy-progress-panel[data-phase="unknown"] .agy-progress-meter > span[data-state="running"] { background: var(--agy-track); }
 .agy-progress-panel[data-phase="canceled"] .agy-progress-meter > span[data-state="running"] { background: var(--agy-error); }
 
 .agy-progress-count {
@@ -157,7 +162,7 @@
 
 .agy-progress-task[data-state="running"] { color: var(--agy-active); }
 .agy-progress-task[data-state="done"] .agy-task-icon { color: var(--agy-complete); }
-.agy-progress-task[data-state="paused"] { color: var(--agy-attention); }
+.agy-progress-task[data-state="recheck"] { color: var(--agy-attention); }
 .agy-progress-task:is([data-state="blocked"], [data-state="canceled"]) { color: var(--agy-error); }
 
 .agy-task-icon { text-align: center; }
@@ -175,6 +180,36 @@
   padding: .25rem .6rem .4rem;
   color: var(--agy-muted);
 }
+
+.agy-progress-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .3rem .65rem;
+  padding: .25rem .65rem .4rem;
+}
+
+.agy-progress-actions > button {
+  padding: .15rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--agy-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.agy-progress-actions > button:hover { text-decoration: underline; }
+.agy-progress-actions > .agy-progress-attention { color: var(--agy-attention); }
+.agy-progress-attention-detail {
+  max-width: min(100%, 18rem);
+  overflow: hidden;
+  color: var(--agy-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agy-progress-actions > .agy-progress-failure { color: var(--agy-error); }
+.agy-progress-outcome { color: var(--agy-muted); }
+.agy-progress-panel[data-phase="failed"] .agy-progress-outcome { color: var(--agy-error); }
 
 .agy-live-timer {
   display: inline-flex;
@@ -214,3 +249,40 @@
 }
 
 .agy-todo-source-hidden { display: none !important; }
+
+.agy-update-notice {
+  position: fixed;
+  z-index: 1000;
+  inset: 3rem 1rem auto auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .35rem .85rem;
+  max-width: calc(100vw - 2rem);
+  box-sizing: border-box;
+  padding: .55rem .75rem;
+  border: 1px solid light-dark(#dce4df, #39433e);
+  border-radius: .6rem;
+  background: light-dark(#f7f8f7, #191d1c);
+  color: light-dark(#222827, #e3eae6);
+  font: inherit;
+  font-size: .825rem;
+}
+
+.agy-update-actions {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.agy-update-actions a { color: light-dark(#09644e, #8bdabd); }
+.agy-update-actions button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: light-dark(#53615c, #a3b3ab);
+  font: inherit;
+  cursor: pointer;
+}
+
+.agy-update-actions button:hover { text-decoration: underline; }

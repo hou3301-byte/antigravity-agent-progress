@@ -2,11 +2,13 @@ import fcntl
 import hashlib
 import json
 import os
+import queue
 import re
 import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -15,6 +17,55 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 from websocket import MiniWebSocket
+
+
+RELEASES_URL = "https://api.github.com/repos/hou3301-byte/antigravity-agent-progress/releases/latest"
+RELEASE_TAG = re.compile(r"v([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})")
+UPDATE_INTERVAL = 2 * 60 * 60
+
+
+def release_version(tag):
+    match = RELEASE_TAG.fullmatch(tag) if isinstance(tag, str) else None
+    return tuple(map(int, match.groups())) if match else ()
+
+
+def fetch_release_tag():
+    response = subprocess.run(
+        ["/usr/bin/curl", "-4fsSL", "--connect-timeout", "4", "--max-time", "6", "--max-filesize",
+         "524288", RELEASES_URL],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True, timeout=8,
+    )
+    release = json.loads(response.stdout)
+    if isinstance(release, dict) and release.get("draft") is False and release.get("prerelease") is False:
+        tag = release.get("tag_name")
+        if release_version(tag):
+            return tag
+    return None
+
+
+def check_release_update(cache_path, installed):
+    try:
+        with cache_path.open(encoding="utf-8") as stream:
+            cache = json.loads(stream.read(4096))
+        if not isinstance(cache, dict):
+            cache = {}
+    except (OSError, ValueError):
+        cache = {}
+
+    now = time.time()
+    checked = cache.get("checked_at")
+    tag = cache.get("tag")
+    if not isinstance(checked, (int, float)) or not 0 <= now - checked < UPDATE_INTERVAL:
+        checked = now
+        try:
+            tag = fetch_release_tag()
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+        try:
+            cache_path.write_text(json.dumps({"checked_at": checked, "tag": tag}), encoding="utf-8")
+        except OSError:
+            pass
+    return (tag if release_version(tag) > installed else None), checked + UPDATE_INTERVAL
 
 
 def read_targets(port):
@@ -155,11 +206,13 @@ def parse_transcript_todo(transcript_path, cache=None):
         for _, kind, payload in events:
             if kind == "list":
                 has_active_mark = any(mark == "/" for mark, _ in payload)
-                if has_active_mark or (items is None and has_markers):
+                is_same_checklist = items and [label for _, label in payload] == [item["label"] for item in items]
+                completed_checklist = is_same_checklist and all(mark.lower() == "x" for mark, _ in payload)
+                if has_active_mark or (items is None and has_markers) or completed_checklist:
                     items = [{"label": label, "state": MARK_TO_STATE[mark]} for mark, label in payload]
                     labels = tuple(item["label"] for item in items)
                     sources[labels] = None
-                    done = False
+                    done = bool(completed_checklist)
             elif kind == "progress" and items:
                 current_step, total, is_blocked = payload
                 if total != len(items) or not 1 <= current_step <= total:
@@ -170,8 +223,8 @@ def parse_transcript_todo(transcript_path, cache=None):
                         item["state"] = "done"
                     elif idx == active_idx:
                         item["state"] = "blocked" if is_blocked else "running"
-                    else:
-                        item["state"] = "pending"
+                    elif item["state"] in {"running", "blocked"}:
+                        item["state"] = "recheck"
                 done = False
             elif kind == "done" and items:
                 for item in items:
@@ -193,6 +246,10 @@ def read_progress(raw_url, brain, cache=None):
     conversation = match[1]
     started_at = 0
     active = False
+    outcome = None
+    had_failure = False
+    has_validation = False
+    waiting_background = False
     running_start = None
     state_file = brain / conversation / ".system_generated/agent-progress/state.json"
     try:
@@ -202,6 +259,10 @@ def read_progress(raw_url, brain, cache=None):
             if isinstance(state.get("started_at"), (int, float)):
                 started_at = state["started_at"]
             active = bool(state.get("active"))
+            outcome = state.get("outcome")
+            had_failure = state.get("had_failure") is True
+            has_validation = state.get("has_validation") is True
+            waiting_background = state.get("waiting_background") is True
             running = state.get("running")
             if active and isinstance(running, list):
                 starts = [item["start"] for item in running
@@ -215,12 +276,16 @@ def read_progress(raw_url, brain, cache=None):
     items = todo["items"] if todo else []
     done = bool(todo["done"]) if todo else False
     background_count = todo["background_count"] if todo else 0
-    if not items and not active and not background_count:
+    if not (items or active or background_count or had_failure or has_validation or outcome in ("failed", "limit", "canceled")):
         return None
     return {
         "conversation": conversation,
         "started_at": started_at,
         "active": active,
+        "outcome": outcome,
+        "had_failure": had_failure,
+        "has_validation": has_validation,
+        "waiting_background": waiting_background,
         "running_start": running_start,
         "background_count": background_count,
         "background_start": todo["background_start"] if todo else None,
@@ -230,7 +295,7 @@ def read_progress(raw_url, brain, cache=None):
     }
 
 
-def update_page(port, address, overlay, fingerprint, progress=None):
+def update_page(port, address, overlay, fingerprint, progress=None, release_notice=None):
     origin, path = address
     client = MiniWebSocket(port, path, timeout=1)
     try:
@@ -243,12 +308,16 @@ def update_page(port, address, overlay, fingerprint, progress=None):
                     f"{json.dumps(fingerprint)};\n{overlay}\n}}")
             client.call("Runtime.evaluate", {"expression": code}, timeout=2)
         data = json.dumps(progress, ensure_ascii=True)
-        client.call("Runtime.evaluate", {"expression": f"if ({guard}) window.__agyProgress?.publish({data})"}, timeout=1)
+        code = f"if ({guard}) window.__agyProgress?.publish({data})"
+        if release_notice:
+            code += f"; if ({guard}) window.__agyProgress?.showUpdate({json.dumps(release_notice)})"
+        result = client.call("Runtime.evaluate", {"expression": code, "returnByValue": True}, timeout=1)
+        return result.get("result", {}).get("value") is True
     finally:
         client.close()
 
 
-def open_session(executable, resources):
+def open_session(executable, resources, state):
     if subprocess.run(["/usr/bin/pgrep", "-x", "Antigravity"], stdout=subprocess.DEVNULL).returncode == 0:
         raise RuntimeError("请先保存工作并退出正在运行的 Antigravity（⌘Q），再打开中文入口。")
 
@@ -261,6 +330,18 @@ def open_session(executable, resources):
     fingerprint = hashlib.sha256(overlay.encode()).hexdigest()[:16]
     brain = Path.home() / ".gemini/antigravity/brain"
     transcript_cache = {}
+    try:
+        installed = release_version("v" + (resources / "version.txt").read_text(encoding="ascii").strip())
+    except (OSError, UnicodeError):
+        installed = ()
+    notified_path = state / "release-notified"
+    try:
+        notified = release_version(notified_path.read_text(encoding="ascii").strip())
+    except (OSError, UnicodeError):
+        notified = ()
+    updates = queue.SimpleQueue()
+    next_check = 0
+    release_notice = None
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -273,6 +354,19 @@ def open_session(executable, resources):
     deadline = time.monotonic() + 20
     connected = False
     while app.poll() is None:
+        now = time.time()
+        if installed and now >= next_check:
+            thread = threading.Thread(
+                target=lambda: updates.put(check_release_update(state / "release-check.json", installed)),
+                daemon=True,
+            )
+            thread.start()
+            next_check = now + UPDATE_INTERVAL
+        try:
+            candidate, next_check = updates.get_nowait()
+            release_notice = candidate if release_version(candidate) > notified else None
+        except queue.Empty:
+            pass
         try:
             targets = read_targets(port)
             connected = True
@@ -284,7 +378,15 @@ def open_session(executable, resources):
             try:
                 address = page_address(target, port)
                 if address:
-                    update_page(port, address, overlay, fingerprint, read_progress(target["url"], brain, transcript_cache))
+                    displayed = update_page(port, address, overlay, fingerprint,
+                                            read_progress(target["url"], brain, transcript_cache), release_notice)
+                    if displayed and release_notice:
+                        notified = release_version(release_notice)
+                        try:
+                            notified_path.write_text(release_notice + "\n", encoding="ascii")
+                        except OSError:
+                            pass
+                        release_notice = None
             except (OSError, ValueError, EOFError, RuntimeError):
                 continue
         time.sleep(0.5)
@@ -302,7 +404,7 @@ def main(executable, state):
             return
         pid_file.write_text(str(os.getpid()), encoding="ascii")
         try:
-            open_session(executable, resources)
+            open_session(executable, resources, state)
         finally:
             pid_file.unlink(missing_ok=True)
 

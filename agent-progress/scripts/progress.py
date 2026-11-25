@@ -1,10 +1,19 @@
 import fcntl
 import json
 import os
+import re
 import sys
 import tempfile
 import time
 from pathlib import Path
+
+
+VALIDATION_COMMAND = re.compile(
+    r"(?:^|[;&|\n])\s*(?:[\w./-]*/)?(?:"
+    r"python(?:3(?:\.\d+)?)?\s+-m\s+(?:pytest|unittest)|pytest|go\s+test|cargo\s+test"
+    r"|(?:npm|pnpm|yarn)\s+(?:run\s+)?test|(?:mvnw?|gradlew?)\s+(?:test|verify|check)"
+    r"|node\s+--test|vitest|jest)(?=\s|$|[;&|])"
+)
 
 
 def write_atomic(path, content):
@@ -53,10 +62,21 @@ def process_event(kind, event):
             return
 
         if kind == "stop":
-            if event.get("fullyIdle") is False:
-                return
-            state["active"] = False
+            reason = event.get("terminationReason")
+            if event.get("error") or reason == "error":
+                state["outcome"] = "failed"
+            elif reason == "max_steps_exceeded":
+                state["outcome"] = "limit"
+            elif reason in ("cancel", "canceled", "cancelled", "user_cancelled", "user_canceled", "interrupted"):
+                state["outcome"] = "canceled"
+            else:
+                state["outcome"] = "ended"
             state["running"] = []
+            if event.get("fullyIdle") is False:
+                state["waiting_background"] = True
+            else:
+                state["active"] = False
+                state.pop("waiting_background", None)
         elif kind in {"pre", "post"}:
             step = event.get("stepIdx")
             if not isinstance(step, int):
@@ -65,11 +85,21 @@ def process_event(kind, event):
             if not isinstance(running, list):
                 running = []
             if kind == "pre":
+                state.pop("waiting_background", None)
+                state.pop("outcome", None)
                 if not any(isinstance(item, dict) and item.get("step") == step for item in running):
                     running.append({"step": step, "start": timestamp})
                 state["running"] = running
             else:
                 state["running"] = [item for item in running if isinstance(item, dict) and item.get("step") != step]
+                if event.get("error"):
+                    state["had_failure"] = True
+                tool = event.get("toolCall") or {}
+                if isinstance(tool, dict) and tool.get("name") == "run_command":
+                    args = tool.get("args")
+                    command = args.get("CommandLine") if isinstance(args, dict) else None
+                    if isinstance(command, str) and VALIDATION_COMMAND.search(command):
+                        state["has_validation"] = True
 
         write_atomic(state_file, json.dumps(state, ensure_ascii=False))
 

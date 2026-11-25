@@ -1,8 +1,11 @@
 import json
 import plistlib
 import runpy
+import shlex
+import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import unittest
@@ -52,9 +55,12 @@ class InstallationTest(unittest.TestCase):
         self.assertIn(str(self.official), shell.read_text())
         self.assertTrue((self.state / "runtime/overlay.js").is_file())
         self.assertTrue((self.state / "runtime/progress-overlay.js").is_file())
+        manifest = json.loads((ROOT / "agent-progress/plugin.json").read_text())
+        self.assertEqual((self.state / "runtime/version.txt").read_text().strip(), manifest["version"])
         self.assertEqual((self.state / "runtime/progress.css").read_bytes(),
                          (ROOT / "agent-progress/assets/progress.css").read_bytes())
         self.assertTrue((self.state / "uninstall.sh").is_file())
+        self.assertEqual((self.state / "upgrade.sh").read_bytes(), (ROOT / "install.sh").read_bytes())
         self.uninstall(dry_run=True)
         self.assertTrue(self.app.is_dir())
         self.assertTrue(self.system_link.is_symlink())
@@ -149,6 +155,47 @@ class InstallationTest(unittest.TestCase):
         subprocess.run(["/bin/bash", str(local_state / "uninstall.sh"), "--workspace", str(workspace)], check=True)
         self.assertFalse(local_state.exists())
         self.assertEqual(list((settings / "plugins").iterdir()), [])
+
+    def test_fixed_upgrade_entry_downloads_latest_without_changing_workspace_scope(self):
+        workspace = self.root / "Upgrade Project"
+        workspace.mkdir()
+        subprocess.run(["/bin/bash", str(ROOT / "install.sh"), "--workspace", str(workspace), "--progress-only"],
+                       check=True)
+        settings = workspace / ".agents"
+        entry = settings / "antigravity-agent-progress-install/upgrade.sh"
+        bundle = self.root / "release bundle"
+        bundle.mkdir()
+        for relative in ("scripts", "agent-progress", "vendor"):
+            shutil.copytree(ROOT / relative, bundle / relative)
+        for name in ("install.sh", "uninstall.sh"):
+            shutil.copyfile(ROOT / name, bundle / name)
+        manifest = bundle / "agent-progress/plugin.json"
+        payload = json.loads(manifest.read_text())
+        original = payload["version"]
+        version = ".".join([*original.split(".")[:2], str(int(original.split(".")[2]) + 1)])
+        manifest.write_text(json.dumps({**payload, "version": version}))
+        archive = self.root / "release.tar.gz"
+        with tarfile.open(archive, "w:gz") as compressed:
+            compressed.add(bundle, arcname="tag-release")
+        responses = self.root / "network.log"
+        curl = self.root / "test curl"
+        metadata = json.dumps({"tag_name": "v" + version, "draft": False, "prerelease": False})
+        curl.write_text(
+            "#!/bin/bash\n"
+            f'if [[ "$*" == *"/releases/latest"* ]]; then echo {shlex.quote(metadata)}; '
+            f'elif [[ "$*" == *"/refs/tags/v{version}"* ]]; then '
+            f'echo download >> {shlex.quote(str(responses))}; cp {shlex.quote(str(archive))} "${{!#}}"; '
+            "else exit 1; fi\n"
+        )
+        curl.chmod(0o755)
+        for _ in range(2):
+            entry.write_text(entry.read_text().replace("/usr/bin/curl", shlex.quote(str(curl))))
+            subprocess.run(["/bin/bash", str(entry)], check=True)
+            installed = settings / "plugins/agent-progress/plugin.json"
+            self.assertEqual(json.loads(installed.read_text())["version"], version)
+            self.assertFalse((settings / "plugins/antigravity-zh-prompt").exists())
+            self.assertFalse((entry.parent / "runtime").exists())
+        self.assertEqual(responses.read_text().splitlines(), ["download"])
 
 
 if __name__ == "__main__":

@@ -217,6 +217,7 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
             for script in ("launcher.py", "progress-overlay.js"):
                 shutil.copyfile(bundle / "scripts" / script, runtime / script)
             shutil.copyfile(bundle / PROGRESS / "assets/progress.css", runtime / "progress.css")
+            (runtime / "version.txt").write_text(publisher["version"] + "\n", encoding="ascii")
             current = fingerprint(installed_runtime) if installed_runtime.is_dir() and not installed_runtime.is_symlink() else None
             if current != fingerprint(runtime):
                 pending[installed_runtime] = runtime
@@ -257,6 +258,7 @@ def finish_install(bundle, pending, replacements, tracked, state, stage):
             source.rename(target)
             created.append(target)
         for source, name in ((bundle / "scripts" / "package.py", "package.py"),
+                             (bundle / "install.sh", "upgrade.sh"),
                              (bundle / "uninstall.sh", "uninstall.sh")):
             saved = stage / name
             shutil.copyfile(source, saved)
