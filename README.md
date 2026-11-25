@@ -2,35 +2,36 @@
 
 在 Antigravity 桌面版的原聊天中查看 Agent 的阶段汇报、任务进度、工具调用和耗时。安装包还提供一个独立的「Antigravity 中文」入口，用同一份官方 App 启动中文界面。
 
-[最新版本与发布说明](https://github.com/hou3301-byte/antigravity-agent-progress/releases/latest)
+当前正式版 [v0.6.0](https://github.com/hou3301-byte/antigravity-agent-progress/releases/tag/v0.6.0) · [最新发布说明](https://github.com/hou3301-byte/antigravity-agent-progress/releases/latest)
 
-![Antigravity 桌面版实测，原生工具行实时读秒和默认收起的任务状态](assets/execution-preview.png)
+![Antigravity 桌面版任务卡与工具计时示例](assets/execution-preview.png)
 
 ## 功能
 
 | 功能 | 使用效果 |
 | --- | --- |
-| 边做边汇报 | 多步骤任务中，Agent 用简短消息交代当前发现和下一步。连续的短调用可以合并汇报，简单问答直接回答。 |
-| 流内任务清单 | 三个及以上阶段的任务，或明确要求展示进度时，默认只显示一行当前阶段和完成数。展开后可查看各项状态。完成或停止后收成可回看的摘要。 |
-| 完整步骤与工具详情 | 默认展开本轮的 `Worked for` 等原生步骤分组，可以手动收起。工具调用保留在原对话里，点「工具详情」可展开本轮输出。 |
-| 前台与后台计时 | 前台在原生工具行上读秒。工具转入后台后，状态区显示运行中的后台任务数和耗时。 |
+| 阶段汇报 | 汇报会改变判断的新发现、方案变化、关键失败和阻塞。常规工具步骤保留在原生分组里，点「工具详情」按需展开。 |
+| 流内任务清单 | 长任务的任务卡默认只显示当前阶段和完成数。验证失败后返工会保留失败记录，并标出待复核项。 |
+| 等待与验收 | 任务卡可以定位原生审批或提问，也能打开可识别的失败记录、验证输出和改动审阅。 |
+| 前台与后台计时 | 优先使用 Antigravity 原生读秒。拿到可靠起点时补充耗时，后台任务继续运行时单独显示。 |
+| 更新提醒 | 「Antigravity 中文」每两小时检查最新正式版，每个新版提醒一次。可直接查看发布说明，或稍后处理。 |
 | 中文界面和中文规则 | 「Antigravity 中文」入口用本地 CDP 翻译界面控件。简体中文规则插件可以独立开关。 |
 
-阶段汇报由插件规则引导。流内任务卡、工具行读秒和步骤自动展开由本项目的「Antigravity 中文」入口提供。它启动官方 App，通过仅监听本机的 CDP 渲染界面增强。监视进程随该次 App 会话退出。
+阶段汇报由插件规则引导。「Antigravity 中文」入口提供任务卡、工具详情快捷入口、补充计时和更新提醒。它启动官方 App，通过仅监听本机的 CDP 增强界面。监视进程随 App 会话退出。
 
 ## 安装
 
-需要 macOS、已安装的 [Antigravity App](https://antigravity.google/download) 和可用的 `/usr/bin/python3`。v0.5.0 已在 Antigravity 桌面版 2.34.0 上实测。运行以下命令为当前用户的所有项目安装进度插件、中文规则和中文入口。
+需要 macOS、已安装的 Antigravity 桌面版和可用的 `/usr/bin/python3`。以下固定入口会安装最新正式版。首次全局安装默认包括进度插件、中文规则和中文入口。 [下载 Antigravity](https://antigravity.google/download)
 
 ```bash
 (
   set -o pipefail
   curl -4 -fsSL --connect-timeout 5 --max-time 15 \
-    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.5.0/install.sh | bash
+    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/main/install.sh | bash
 )
 ```
 
-`-4` 让脚本下载走 IPv4，可避开部分网络访问 `raw.githubusercontent.com` 时的 IPv6 超时。连接超时为 5 秒，脚本下载总时限为 15 秒。启动安装脚本后，发布包由 `codeload.github.com` 另行下载。安装完成时，终端会打印「卸载入口」及其路径。
+`-4` 让脚本下载走 IPv4，可避开部分网络访问 `raw.githubusercontent.com` 时的 IPv6 超时。脚本会先查询 GitHub 的最新正式版，再下载对应标签的发布包。安装完成后，终端会打印升级和卸载入口。
 
 可以在上面命令的 `bash` 后追加以下选项。以下三种模式都只安装插件。
 
@@ -42,14 +43,7 @@
 
 全局插件安装到 `~/.gemini/config/plugins/`，项目插件安装到项目内的 `.agents/plugins/`。如果本机已有有效的全局配置，安装器会登记 `verboseConversationSteps` 的原值并开启完整步骤展示。
 
-如果脚本下载仍然超时，可以从 GitHub 克隆同一版本，再运行本地安装脚本。
-
-```bash
-git clone --depth 1 --branch v0.5.0 https://github.com/hou3301-byte/antigravity-agent-progress.git &&
-  bash antigravity-agent-progress/install.sh
-```
-
-已克隆仓库时，也可以在对应版本的仓库根目录直接运行 `bash install.sh`。
+如果脚本下载仍然超时，可以在 Release 页下载 **Source code (tar.gz)**，解压后在目录中运行 `bash install.sh`。 [最新正式版](https://github.com/hou3301-byte/antigravity-agent-progress/releases/latest)
 
 ## 使用
 
@@ -63,7 +57,13 @@ git clone --depth 1 --branch v0.5.0 https://github.com/hou3301-byte/antigravity-
 
 ## 升级
 
-直接重新运行新版安装命令即可升级由安装器登记且未在本机修改的插件，再按 **⌘Q** 退出并重新打开「Antigravity 中文」。如果安装提示进度插件未登记或已修改，先按提示备份并移走对应目录，再重新安装。
+旧版首次升级时运行上面的固定安装命令。安装完成后，全局安装可使用本机升级入口。
+
+```bash
+bash "$HOME/.gemini/config/antigravity-agent-progress-install/upgrade.sh"
+```
+
+项目级安装的入口位于项目内的 `.agents/antigravity-agent-progress-install/upgrade.sh`。升级时保留原安装范围。更新后按 **⌘Q** 退出，并重新打开「Antigravity 中文」。如果安装提示进度插件未登记或已修改，先按提示备份并移走对应目录，再重新安装。
 
 ## 一键卸载与回退
 
@@ -79,7 +79,7 @@ bash ~/.gemini/config/antigravity-agent-progress-install/uninstall.sh
 (
   set -o pipefail
   curl -4 -fsSL --connect-timeout 5 --max-time 15 \
-    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/v0.5.0/uninstall.sh | bash
+    https://raw.githubusercontent.com/hou3301-byte/antigravity-agent-progress/main/uninstall.sh | bash
 )
 ```
 

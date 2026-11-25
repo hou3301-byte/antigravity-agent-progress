@@ -40,6 +40,12 @@ class InstallationTest(unittest.TestCase):
     def uninstall(self, dry_run=False):
         PACKAGE["uninstall"](self.destination, self.state, self.home, dry_run, self.system_apps)
 
+    def test_readme_links_to_manifest_release(self):
+        manifest = json.loads((ROOT / "agent-progress/plugin.json").read_text())
+        tag = "v" + manifest["version"]
+        release = f"{manifest['repository']}/releases/tag/{tag}"
+        self.assertIn(f"[{tag}]({release})", (ROOT / "README.md").read_text(encoding="utf-8"))
+
     def test_install_and_uninstall_owned_files(self):
         saved_config = self.config.read_bytes()
         self.install()
