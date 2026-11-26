@@ -1,0 +1,106 @@
+:is(.agy-usage-trigger, .agy-usage-panel) {
+  --usage-surface: light-dark(#f7f8f7, #191d1c);
+  --usage-text: light-dark(#222827, #e3eae6);
+  --usage-muted: light-dark(#52615b, #a3b3ab);
+  --usage-line: light-dark(#dce4df, #37443e);
+  --usage-hover: light-dark(#e6eee9, #2a342f);
+  --usage-accent: light-dark(#09644e, #8bdabd);
+  --usage-track: light-dark(#dce7e1, #34443b);
+  --usage-estimate: light-dark(#976323, #e3ba73);
+  color: var(--usage-text);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  -webkit-app-region: no-drag;
+}
+
+.agy-usage-trigger {
+  flex: none;
+  border: 1px solid var(--usage-line);
+  border-radius: 5px;
+  background: transparent;
+  padding: 3px 7px;
+  margin-inline-end: 6px;
+  font-size: 12px;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.agy-usage-panel {
+  position: fixed;
+  inset: 44px 12px auto auto;
+  width: min(405px, calc(100vw - 24px));
+  max-height: calc(100dvh - 58px);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--usage-line);
+  border-radius: 10px;
+  background: var(--usage-surface);
+  box-shadow: 0 10px 36px rgba(15, 25, 20, .18);
+  color: var(--usage-text);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: start;
+  overscroll-behavior: contain;
+}
+
+.agy-usage-panel:not(:popover-open) { display: none; }
+.agy-usage-panel :is(h2, h3, h4, p) { margin: 0; }
+.agy-usage-panel :is(h2, h3, h4, strong) { font-weight: 650; }
+.agy-usage-panel h2 { font-size: 16px; }
+.agy-usage-panel :is(h3, h4) { font-size: 13px; }
+
+.agy-usage-header,
+.agy-usage-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.agy-usage-header { align-items: center; padding: 12px 15px; border-bottom: 1px solid var(--usage-line); }
+.agy-usage-plan { flex: 1; font-size: 12px; overflow-wrap: anywhere; }
+.agy-usage-plan, .agy-usage-status, .agy-usage-muted, .agy-usage-meta { color: var(--usage-muted); }
+.agy-usage-status, .agy-usage-meta { font-size: 11px; text-align: end; }
+.agy-usage-meta > :first-child { text-align: start; }
+.agy-usage-meta > :last-child { color: var(--usage-estimate); }
+.agy-usage-meta > :last-child:empty { display: none; }
+
+.agy-usage-section { padding: 12px 15px; }
+.agy-usage-section + .agy-usage-section { border-top: 1px solid var(--usage-line); }
+.agy-usage-section > .agy-usage-row { margin-bottom: 9px; }
+.agy-usage-pool + .agy-usage-pool { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--usage-line); }
+.agy-usage-pool h4 { overflow-wrap: anywhere; }
+.agy-usage-bucket { margin-top: 5px; }
+.agy-usage-bucket + .agy-usage-bucket { margin-top: 9px; }
+.agy-usage-balance { display: flex; gap: 8px; align-items: baseline; }
+.agy-usage-balance > span { color: var(--usage-muted); font-size: 11px; }
+.agy-usage-meter { display: flex; height: 5px; margin: 4px 0; border-radius: 4px; background: var(--usage-track); overflow: hidden; }
+.agy-usage-meter[data-stale] { opacity: .55; }
+.agy-usage-used { background: var(--usage-accent); }
+.agy-usage-reserved { background: var(--usage-estimate); }
+.agy-usage-help { margin-top: 8px; font-size: 11px; color: var(--usage-muted); }
+.agy-usage-help p { margin-top: 5px; }
+
+.agy-usage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.agy-usage-grid > p { grid-column: 1 / -1; }
+.agy-usage-metric { min-width: 0; border: 1px solid var(--usage-line); border-radius: 6px; padding: 7px 9px; }
+.agy-usage-metric span { display: block; color: var(--usage-muted); font-size: 11px; }
+.agy-usage-metric strong { display: block; margin-top: 2px; font-size: 17px; overflow-wrap: anywhere; }
+
+.agy-usage-settings { border-top: 1px solid var(--usage-line); padding: 9px 15px; }
+.agy-usage-panel summary { cursor: pointer; }
+.agy-usage-option { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+.agy-usage-option > :first-child { flex: 1; display: flex; align-items: center; gap: 5px; }
+.agy-usage-option input { accent-color: var(--usage-accent); }
+.agy-usage-options { margin-block: 8px; }
+.agy-usage-panel button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.agy-usage-panel button:disabled { opacity: .35; cursor: default; }
+.agy-usage-panel button:not(:disabled):hover, .agy-usage-trigger:hover { background: var(--usage-hover); }
+:is(.agy-usage-trigger, .agy-usage-panel :is(button, input, summary)):focus-visible { outline: 2px solid var(--usage-accent); }

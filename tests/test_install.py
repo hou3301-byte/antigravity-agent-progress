@@ -61,6 +61,8 @@ class InstallationTest(unittest.TestCase):
         self.assertIn(str(self.official), shell.read_text())
         self.assertTrue((self.state / "runtime/overlay.js").is_file())
         self.assertTrue((self.state / "runtime/progress-overlay.js").is_file())
+        for usage_file in ("usage.py", "usage-overlay.js", "usage.css"):
+            self.assertTrue((self.state / "runtime" / usage_file).is_file())
         manifest = json.loads((ROOT / "agent-progress/plugin.json").read_text())
         self.assertEqual((self.state / "runtime/version.txt").read_text().strip(), manifest["version"])
         self.assertEqual((self.state / "runtime/progress.css").read_bytes(),

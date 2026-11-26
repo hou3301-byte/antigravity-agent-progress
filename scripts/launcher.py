@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 from websocket import MiniWebSocket
+from usage import SESSION_INTERVAL, UsageMonitor, load_layout, save_layout, valid_layout
 
 
 RELEASES_URL = "https://api.github.com/repos/hou3301-byte/antigravity-agent-progress/releases/latest"
@@ -238,12 +239,16 @@ def parse_transcript_todo(transcript_path, cache=None):
     return result
 
 
-def read_progress(raw_url, brain, cache=None):
+def conversation_id(raw_url):
     route = urllib.parse.urlsplit(raw_url).path
     match = re.fullmatch(r"/c/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})", route)
-    if not match:
+    return match[1] if match else None
+
+
+def read_progress(raw_url, brain, cache=None):
+    conversation = conversation_id(raw_url)
+    if not conversation:
         return None
-    conversation = match[1]
     started_at = 0
     active = False
     outcome = None
@@ -295,24 +300,26 @@ def read_progress(raw_url, brain, cache=None):
     }
 
 
-def update_page(port, address, overlay, fingerprint, progress=None, release_notice=None):
+def update_page(port, address, overlay, fingerprint, progress, release_notice, usage, layout):
     origin, path = address
     client = MiniWebSocket(port, path, timeout=1)
     try:
         guard = f"location.origin === {json.dumps(origin)}"
         check = (f"{guard} && window.__observedDocument === document && Boolean(window.__agyProgress) && "
+                 "Boolean(window.__agyUsage) && "
                  f"window.__antigravityZhPatchFingerprint === {json.dumps(fingerprint)}")
         result = client.call("Runtime.evaluate", {"expression": check, "returnByValue": True}, timeout=1)
         if result.get("result", {}).get("value") is not True:
             code = (f"if ({guard}) {{ window.__antigravityZhPatchRequestedFingerprint = "
                     f"{json.dumps(fingerprint)};\n{overlay}\n}}")
             client.call("Runtime.evaluate", {"expression": code}, timeout=2)
-        data = json.dumps(progress, ensure_ascii=True)
-        code = f"if ({guard}) window.__agyProgress?.publish({data})"
-        if release_notice:
-            code += f"; if ({guard}) window.__agyProgress?.showUpdate({json.dumps(release_notice)})"
+        code = (f"{guard} ? (() => {{"
+                f"window.__agyProgress?.publish({json.dumps(progress)});"
+                f"return {{displayed: Boolean(window.__agyProgress?.showUpdate?.({json.dumps(release_notice)})),"
+                f"layout: window.__agyUsage?.publish({json.dumps(usage)}, {json.dumps(layout)})}};"
+                "})() : null")
         result = client.call("Runtime.evaluate", {"expression": code, "returnByValue": True}, timeout=1)
-        return result.get("result", {}).get("value") is True
+        return result.get("result", {}).get("value") or {}
     finally:
         client.close()
 
@@ -327,6 +334,9 @@ def open_session(executable, resources, state):
     progress = (resources / "progress-overlay.js").read_text(encoding="utf-8")
     stylesheet = (resources / "progress.css").read_text(encoding="utf-8")
     overlay = translation + "\n;\n" + progress.replace("/*__AGY_PROGRESS_CSS__*/ ''", json.dumps(stylesheet))
+    usage_script = (resources / "usage-overlay.js").read_text(encoding="utf-8")
+    usage_styles = (resources / "usage.css").read_text(encoding="utf-8")
+    overlay += "\n;\n" + usage_script.replace("/*__AGY_USAGE_CSS__*/ ''", json.dumps(usage_styles))
     fingerprint = hashlib.sha256(overlay.encode()).hexdigest()[:16]
     brain = Path.home() / ".gemini/antigravity/brain"
     transcript_cache = {}
@@ -351,6 +361,20 @@ def open_session(executable, resources, state):
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+    usage_monitor = UsageMonitor(brain.parent, app.pid)
+    usage_layout_path = state / "usage-layout.json"
+    usage_layout = load_layout(usage_layout_path)
+    usage_updates = queue.SimpleQueue()
+    usage_snapshots = {}
+    usage_pending = False
+    usage_next = 0
+
+    def refresh_usage(conversations):
+        try:
+            usage_updates.put(usage_monitor.refresh(conversations))
+        except (OSError, ValueError, TypeError, AttributeError):
+            usage_updates.put({})
+
     deadline = time.monotonic() + 20
     connected = False
     while app.poll() is None:
@@ -374,19 +398,40 @@ def open_session(executable, resources, state):
             if not connected and time.monotonic() > deadline:
                 raise RuntimeError("未能连接 Antigravity 的本地调试窗口。退出后可用官方图标启动。")
             targets = []
+        pages = []
         for target in targets:
             try:
                 address = page_address(target, port)
                 if address:
-                    displayed = update_page(port, address, overlay, fingerprint,
-                                            read_progress(target["url"], brain, transcript_cache), release_notice)
-                    if displayed and release_notice:
-                        notified = release_version(release_notice)
-                        try:
-                            notified_path.write_text(release_notice + "\n", encoding="ascii")
-                        except OSError:
-                            pass
-                        release_notice = None
+                    pages.append((target["url"], address))
+            except (ValueError, TypeError):
+                continue
+        try:
+            usage_snapshots = usage_updates.get_nowait()
+            usage_pending = False
+        except queue.Empty:
+            pass
+        if pages and not usage_pending and time.monotonic() >= usage_next:
+            conversations = {conversation_id(url) for url, _ in pages} - {None}
+            threading.Thread(target=refresh_usage, args=(conversations,), daemon=True).start()
+            usage_pending = True
+            usage_next = time.monotonic() + SESSION_INTERVAL
+        for url, address in pages:
+            try:
+                usage = usage_snapshots.get(conversation_id(url), usage_snapshots.get(None))
+                change = update_page(port, address, overlay, fingerprint, read_progress(url, brain, transcript_cache),
+                                     release_notice, usage, usage_layout)
+                if change.get("displayed") and release_notice:
+                    notified = release_version(release_notice)
+                    try:
+                        notified_path.write_text(release_notice + "\n", encoding="ascii")
+                    except OSError:
+                        pass
+                    release_notice = None
+                updated_layout = change.get("layout")
+                if valid_layout(updated_layout) and updated_layout != usage_layout:
+                    usage_layout = updated_layout
+                    save_layout(usage_layout_path, usage_layout)
             except (OSError, ValueError, EOFError, RuntimeError):
                 continue
         time.sleep(0.5)

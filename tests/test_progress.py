@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VENDOR_LAUNCHER = str(ROOT / "vendor/antigravity-zh-launcher")
 if VENDOR_LAUNCHER not in sys.path:
     sys.path.insert(0, VENDOR_LAUNCHER)
+sys.path.insert(0, str(ROOT / "scripts"))
 PROGRESS = runpy.run_path(str(ROOT / "agent-progress/scripts/progress.py"))
 LAUNCHER = runpy.run_path(str(ROOT / "scripts/launcher.py"))
 

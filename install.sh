@@ -20,6 +20,13 @@ fi
 
 while (( $# )); do
   case "$1" in
+    --full)
+      install_dir="$HOME/.gemini/config/plugins"
+      include_chinese=1
+      include_launcher=1
+      explicit_scope=1
+      shift
+      ;;
     --progress-only)
       include_chinese=0
       include_launcher=0
@@ -45,6 +52,7 @@ while (( $# )); do
 在 macOS 安装 Antigravity 中文启动入口和执行进度插件。
 
   bash install.sh                       安装全局插件和中文启动入口
+  bash install.sh --full                切换到完整安装，包含额度面板
   bash install.sh --plugins-only        只安装执行进度和中文规则
   bash install.sh --workspace <目录>     只安装插件到指定项目
   bash install.sh --progress-only       只安装执行进度

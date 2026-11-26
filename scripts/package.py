@@ -214,7 +214,7 @@ def install(bundle, destination, state, home, include_chinese, include_launcher,
             installed_runtime = state / "runtime"
             runtime = stage / "runtime"
             shutil.copytree(bundle / "vendor" / "antigravity-zh-launcher", runtime)
-            for script in ("launcher.py", "progress-overlay.js"):
+            for script in ("launcher.py", "progress-overlay.js", "usage.py", "usage-overlay.js", "usage.css"):
                 shutil.copyfile(bundle / "scripts" / script, runtime / script)
             shutil.copyfile(bundle / PROGRESS / "assets/progress.css", runtime / "progress.css")
             (runtime / "version.txt").write_text(publisher["version"] + "\n", encoding="ascii")
